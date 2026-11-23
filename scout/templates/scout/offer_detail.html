@@ -1,0 +1,58 @@
+{% extends "scout/base.html" %}
+{% load scout_tags %}
+{% block title %}{{ offer.model.code }} @ {{ offer.shop|shop_name }} - discount_scout{% endblock %}
+{% block content %}
+<a class="small" href="{% url 'product_detail' offer.model.product_id %}#model-{{ offer.model_id }}">&lt; {{ offer.model.product.name }}</a>
+<h1>{{ offer.model.code }} @ {{ offer.shop|shop_name }}</h1>
+<p class="small"><a href="{{ offer.url }}" target="_blank" rel="noopener">{{ offer.url|truncatechars:110 }}</a></p>
+<div class="row">
+  <span class="badge {{ offer.status|status_class }}">{{ offer.get_status_display }}</span>
+  {% if not offer.active %}<span class="badge">paused</span>{% endif %}
+  <span class="muted small">Added {{ offer.created_at|date:"Y-m-d" }}</span>
+</div>
+
+<section class="card">
+  <h2>Price history</h2>
+  {% if observations %}
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>When</th><th class="num">Price</th><th>Seller</th><th>Stock</th><th>Tier</th><th></th></tr></thead>
+      <tbody>
+        {% for o in observations %}
+        <tr>
+          <td>{{ o.fetched_at|date:"Y-m-d H:i" }}</td>
+          <td class="num">{{ o.price|pln }}</td>
+          <td>{{ o.seller|default:"-" }}</td>
+          <td>{% if o.in_stock is True %}yes{% elif o.in_stock is False %}no{% else %}-{% endif %}</td>
+          <td>{{ o.tier_used }}</td>
+          <td>{% if o.suspicious %}<span class="badge warn">suspicious</span>{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}<p class="muted">No prices recorded yet.</p>{% endif %}
+</section>
+
+<section class="card">
+  <h2>Failed checks</h2>
+  {% if failures %}
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>When</th><th>Reason</th><th>Tier</th><th>HTTP</th><th>Detail</th></tr></thead>
+      <tbody>
+        {% for f in failures %}
+        <tr>
+          <td>{{ f.at|date:"Y-m-d H:i" }}</td>
+          <td><span class="badge bad">{{ f.get_reason_display }}</span></td>
+          <td>{{ f.tier }}</td>
+          <td>{{ f.http_status|default:"-" }}</td>
+          <td class="small muted">{{ f.detail|truncatechars:120 }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}<p class="muted">None.</p>{% endif %}
+</section>
+{% endblock %}

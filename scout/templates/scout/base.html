@@ -1,0 +1,32 @@
+{% load static %}<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}discount_scout{% endblock %}</title>
+  <link rel="stylesheet" href="{% static 'scout/style.css' %}">
+  <script src="{% static 'scout/vendor/htmx.min.js' %}" defer></script>
+  {% block head %}{% endblock %}
+</head>
+<body hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+  <header class="top">
+    <div class="inner">
+      <a class="brand" href="{% url 'product_list' %}">discount_scout</a>
+      <nav>
+        <a href="{% url 'product_list' %}">Products</a>
+        <a href="{% url 'settings' %}">Settings</a>
+        <a href="{% url 'admin:index' %}">Admin</a>
+      </nav>
+    </div>
+  </header>
+  <main>
+    {% if messages %}
+      <ul class="messages">
+        {% for m in messages %}<li class="{{ m.tags }}">{{ m }}</li>{% endfor %}
+      </ul>
+    {% endif %}
+    {% block content %}{% endblock %}
+  </main>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

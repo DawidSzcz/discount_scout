@@ -155,7 +155,7 @@ Example URLs from SPEC.md, one fetch each:
 3. (done) **Easy shops first:** x-kom/Neonet, Morele, Deluxury, TechLord, MediaMarkt, with fixture tests.
 4. (done) **Check loop:** scheduler, `PriceObservation`, failure handling, sanity guard.
 5. (done) **Notifications:** all-time-low alert + summary email (Gmail SMTP).
-6. **UI:** product list/detail, charts, manual add offer, settings.
+6. (done) **UI:** product list/detail, charts, manual add offer, settings.
 7. **Tier-2 shops:** Ceneo (single + aggregator), Euro, Media Expert/Avans, Empik.
 8. **Matcher** (code -> EAN -> Gemini -> review) + **discovery wizard** (Ceneo -> Gemini).
 9. *(v2)* **Allegro via official API** (aggregator shop class backed by REST, not scraping) + **tier-3 experiment** for OleOle, Electro, Komputronik, ASUS eStore.

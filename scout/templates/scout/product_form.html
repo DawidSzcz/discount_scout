@@ -1,0 +1,19 @@
+{% extends "scout/base.html" %}
+{% block title %}{{ title }} - discount_scout{% endblock %}
+{% block content %}
+<h1>{{ title }}</h1>
+<div class="card">
+  <form method="post" class="form-grid">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <div class="row">
+      <button class="primary" type="submit">Save</button>
+      <a href="{% if product %}{% url 'product_detail' product.pk %}{% else %}{% url 'product_list' %}{% endif %}">Cancel</a>
+    </div>
+  </form>
+</div>
+{% if not product %}
+<p class="muted small">Next you'll add the exact model codes (e.g. UX8407AA-SN515X) and the shop URLs to observe.
+Automatic discovery of models and offers comes in a later version.</p>
+{% endif %}
+{% endblock %}

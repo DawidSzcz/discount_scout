@@ -1,0 +1,13 @@
+{% extends "scout/base.html" %}
+{% block title %}Settings - discount_scout{% endblock %}
+{% block content %}
+<h1>Settings</h1>
+<div class="card">
+  <form method="post" class="form-grid">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button class="primary" type="submit">Save</button>
+  </form>
+</div>
+<p class="muted small">Changing the check interval applies from each offer's next check. Each check is randomly shifted by up to 20% so the traffic doesn't look automated.</p>
+{% endblock %}

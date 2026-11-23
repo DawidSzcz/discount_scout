@@ -1,0 +1,131 @@
+{% extends "scout/base.html" %}
+{% load static scout_tags %}
+{% block title %}{{ product.name }} - discount_scout{% endblock %}
+{% block head %}<script src="{% static 'scout/vendor/chart.umd.min.js' %}" defer></script>{% endblock %}
+{% block content %}
+<div class="row spread">
+  <div>
+    <a class="small" href="{% url 'product_list' %}">&lt; All products</a>
+    <h1>{{ product.name }} {% if not product.active %}<span class="badge">paused</span>{% endif %}</h1>
+  </div>
+  <div class="row">
+    <a class="button" href="{% url 'product_edit' product.pk %}">Rename / pause</a>
+    <form class="inline" method="post" action="{% url 'product_delete' product.pk %}"
+          onsubmit="return confirm('Delete {{ product.name|escapejs }} with all models, offers and price history?')">
+      {% csrf_token %}<button class="danger" type="submit">Delete</button>
+    </form>
+  </div>
+</div>
+
+{% for s in stats %}
+<section class="card" id="model-{{ s.model.pk }}">
+  <div class="row spread">
+    <div>
+      <h2>{{ s.model.code }} {% if not s.model.active %}<span class="badge">paused</span>{% endif %}</h2>
+      {% if s.model.ean %}<span class="muted small">EAN {{ s.model.ean }}</span>{% endif %}
+    </div>
+    <div class="row">
+      <div class="stat">
+        <span class="label">Best now</span>
+        {% if s.best %}<span class="price big">{{ s.best.price|pln }}</span>
+          <a class="small" href="{{ s.best|offer_link }}" target="_blank" rel="noopener">{{ s.best.offer.shop|shop_name }}</a>
+        {% else %}<span class="muted">no price yet</span>{% endif %}
+      </div>
+      <div class="stat">
+        <span class="label">All-time low</span>
+        {% if s.all_time_low %}<span class="price">{{ s.all_time_low.price|pln }}</span>
+          <span class="muted small">{{ s.all_time_low.fetched_at|date:"Y-m-d" }}, {{ s.all_time_low.offer.shop|shop_name }}</span>
+        {% else %}<span class="muted">-</span>{% endif %}
+      </div>
+    </div>
+  </div>
+
+  {% if s.chart.datasets %}
+    <div class="chart-box"><canvas data-chart="{{ s.chart_id }}"></canvas></div>
+    {{ s.chart|json_script:s.chart_id }}
+  {% endif %}
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Shop</th><th class="num">Latest price</th><th>Checked</th><th>Status</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for row in s.rows %}{% include "scout/partials/offer_row.html" %}{% empty %}
+        <tr><td colspan="5" class="muted">No offers yet. Paste a shop URL below.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <form class="add-form" method="post" action="{% url 'offer_create' s.model.pk %}">
+    {% csrf_token %}
+    <input type="url" name="url" required placeholder="https://www.x-kom.pl/p/... (offer URL for {{ s.model.code }})">
+    <button type="submit">Add offer</button>
+  </form>
+
+  <details>
+    <summary>Model options</summary>
+    <div class="row" style="margin-top:8px">
+      <form class="inline" method="post" action="{% url 'model_toggle' s.model.pk %}">
+        {% csrf_token %}<button type="submit">{% if s.model.active %}Pause model{% else %}Resume model{% endif %}</button>
+      </form>
+      <form class="inline" method="post" action="{% url 'model_delete' s.model.pk %}"
+            onsubmit="return confirm('Delete model {{ s.model.code|escapejs }} with its offers and price history?')">
+        {% csrf_token %}<button class="danger" type="submit">Delete model</button>
+      </form>
+    </div>
+  </details>
+</section>
+{% empty %}
+<div class="card empty">No models yet. Add the exact model code you want to observe.</div>
+{% endfor %}
+
+<section class="card">
+  <h2>Add a model</h2>
+  <form class="add-form" method="post" action="{% url 'model_create' product.pk %}">
+    {% csrf_token %}
+    <input type="text" name="code" required placeholder="Model code, e.g. UX8407AA-SN515X">
+    <input type="text" name="ean" placeholder="EAN (optional)" style="flex:0 1 180px">
+    <button type="submit">Add model</button>
+  </form>
+  <p class="muted small">Supported shops: {% for shop in shops %}{{ shop.name }}{% if not forloop.last %}, {% endif %}{% endfor %}.</p>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  const fmt = new Intl.NumberFormat("pl-PL", { style: "currency", currency: "PLN" });
+  document.querySelectorAll("canvas[data-chart]").forEach((canvas) => {
+    const data = JSON.parse(document.getElementById(canvas.dataset.chart).textContent);
+    const xs = data.datasets.flatMap((d) => d.data.map((p) => p.x));
+    const shortRange = Math.max(...xs) - Math.min(...xs) < 3 * 24 * 3600 * 1000;
+    const tick = (v) => new Date(v).toLocaleString("pl-PL", shortRange
+      ? { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }
+      : { day: "2-digit", month: "2-digit", year: "numeric" });
+    new Chart(canvas, {
+      type: "line",
+      data: { datasets: data.datasets.map((d) => ({
+        ...d, stepped: "before", borderWidth: 2,
+        pointRadius: d.data.map((_, i) => (i === d.data.length - 1 ? 0 : 3)),  // last point = "now", not a check
+      })) },
+      options: {
+        maintainAspectRatio: false,
+        interaction: { mode: "nearest", intersect: false },
+        scales: {
+          x: { type: "linear", ticks: { callback: tick, maxTicksLimit: 6 } },
+          y: { ticks: { callback: (v) => fmt.format(v) } },
+        },
+        plugins: {
+          tooltip: { callbacks: {
+            title: (items) => new Date(items[0].parsed.x).toLocaleString("pl-PL"),
+            label: (item) => `${item.dataset.label}: ${fmt.format(item.parsed.y)}`,
+          } },
+        },
+      },
+    });
+  });
+});
+</script>
+{% endblock %}

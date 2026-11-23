@@ -1,0 +1,28 @@
+{% load scout_tags %}<tr id="offer-{{ row.offer.pk }}" class="{% if row.is_best %}best{% endif %} {% if not row.offer.active %}inactive{% endif %}">
+  <td>
+    <a href="{{ row.offer.url }}" target="_blank" rel="noopener">{{ row.offer.shop|shop_name }}</a>
+    {% if row.latest.seller %}<span class="muted small">({{ row.latest.seller }})</span>{% endif %}
+  </td>
+  <td class="num">
+    {% if row.latest %}{{ row.latest.price|pln }}{% if row.latest.suspicious %} <span class="badge warn" title="Held back by the outlier guard; not used for alerts">suspicious</span>{% endif %}
+    {% else %}<span class="muted">-</span>{% endif %}
+  </td>
+  <td class="small">
+    {% if row.offer.last_checked_at %}<span title="{{ row.offer.last_checked_at|date:'Y-m-d H:i' }}">{{ row.offer.last_checked_at|timesince }} ago</span>
+    {% else %}<span class="muted">not yet</span>{% endif %}
+    {% if row.offer.active %}<span class="muted"> / next in {{ row.offer.next_check_at|timeuntil }}</span>{% endif %}
+  </td>
+  <td>
+    {% if not row.offer.active %}<span class="badge">paused</span>
+    {% else %}<span class="badge {{ row.offer.status|status_class }}">{{ row.offer.get_status_display }}</span>{% endif %}
+    {% if row.offer.consecutive_failures %}<span class="muted small">{{ row.offer.consecutive_failures }} failed</span>{% endif %}
+  </td>
+  <td class="actions">
+    <a class="button" href="{% url 'offer_detail' row.offer.pk %}">History</a>
+    <button hx-post="{% url 'offer_check' row.offer.pk %}" hx-target="#offer-{{ row.offer.pk }}" hx-swap="outerHTML">Check now</button>
+    <button hx-post="{% url 'offer_toggle' row.offer.pk %}" hx-target="#offer-{{ row.offer.pk }}" hx-swap="outerHTML">{% if row.offer.active %}Pause{% else %}Resume{% endif %}</button>
+    <button class="danger" hx-post="{% url 'offer_delete' row.offer.pk %}" hx-target="#offer-{{ row.offer.pk }}" hx-swap="outerHTML"
+            hx-confirm="Stop observing this offer and delete its price history?">Remove</button>
+    {% if note %}<span class="note">{{ note }}</span>{% endif %}
+  </td>
+</tr>
