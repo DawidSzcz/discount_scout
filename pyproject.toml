@@ -1,0 +1,24 @@
+[project]
+name = "discount-scout"
+version = "0.1.0"
+description = "Add your description here"
+requires-python = ">=3.12"
+dependencies = [
+    "curl-cffi>=0.17.0",
+    "django>=5.2,<6",
+    "playwright==1.65.2",
+    "playwright-stealth>=2.0.3",
+    "procrastinate[django]>=3.12.0",
+    "psycopg[binary]>=3.3.9",
+    "selectolax>=1.0.2",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+    "pytest-django>=4.14.0",
+]
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "config.settings"
+testpaths = ["tests"]
