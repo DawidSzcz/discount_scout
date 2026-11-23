@@ -146,6 +146,11 @@ Example URLs from SPEC.md, one fetch each:
 | ASUS eStore | BLOCKED 403 | BLOCKED 403 | try tier 3 |
 | Allegro | BLOCKED 403 (likely DataDome) | BLOCKED 403 | **DECIDED: use the official Allegro REST API** instead of scraping |
 
+**Step 7 findings (2026-11-24):**
+- Ceneo product pages list every shop's offer (11 for SN515X), including Allegro, OleOle and Electro, so observing a Ceneo listing covers those v2 shops indirectly.
+- Euro and Media Expert show an "in instalments you only pay X" promo (e.g. 12 599,12 zł); JSON-LD carries the real cash price (13 999 zł), which is what we store.
+- Empik is a marketplace: the featured seller changes between checks and is not always the cheapest; we track the featured offer.
+
 **Takeaways:** 6 shops work with plain HTTP, 5 more with a headless browser, and 5 are still blocked. The blocked five need a tier-3 experiment before we know if they're feasible for free. Allegro will use its official API (`api.allegro.pl`, free with app registration) instead of scraping.
 
 ## 10. Build order
@@ -156,7 +161,7 @@ Example URLs from SPEC.md, one fetch each:
 4. (done) **Check loop:** scheduler, `PriceObservation`, failure handling, sanity guard.
 5. (done) **Notifications:** all-time-low alert + summary email (Gmail SMTP).
 6. (done) **UI:** product list/detail, charts, manual add offer, settings.
-7. **Tier-2 shops:** Ceneo (single + aggregator), Euro, Media Expert/Avans, Empik.
+7. (done) **Tier-2 shops:** Ceneo (single + aggregator), Euro, Media Expert/Avans, Empik.
 8. **Matcher** (code -> EAN -> Gemini -> review) + **discovery wizard** (Ceneo -> Gemini).
 9. *(v2)* **Allegro via official API** (aggregator shop class backed by REST, not scraping) + **tier-3 experiment** for OleOle, Electro, Komputronik, ASUS eStore.
 10. Hardening: snapshot retention, logs, backups (`pg_dump`).

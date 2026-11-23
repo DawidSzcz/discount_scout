@@ -135,3 +135,14 @@ def test_due_offers_respects_schedule_and_pausing(offer):
     offer.active = False
     offer.save()
     assert not due_offers(now + timedelta(hours=2)).exists()
+
+
+def test_aggregator_check_keeps_cheapest_new_offer_with_seller(offer):
+    offer.shop, offer.kind, offer.url = "ceneo", Offer.Kind.AGGREGATOR, "https://www.ceneo.pl/199125559"
+    offer.save()
+    fetch = fake_fetch(load_fixture("ceneo", "product", tier=2))
+    obs = check_offer(offer, fetch_fn=fetch)
+    assert fetch.calls == [2]  # Ceneo skips tier 1
+    assert obs.price == Decimal("12498.00")
+    assert obs.seller == "deluxury.pl"
+    assert obs.seller_url.startswith("https://www.ceneo.pl/Click/Offer/")
