@@ -67,3 +67,8 @@ class DiscoveryRunAdmin(admin.ModelAdmin):
 @admin.register(m.Settings)
 class SettingsAdmin(admin.ModelAdmin):
     list_display = ("user", "check_interval_hours", "summary_interval_hours", "notify_email")
+
+
+@admin.register(m.ShopState)
+class ShopStateAdmin(admin.ModelAdmin):
+    list_display = ("key", "preferred_tier", "last_success_at", "last_request_at")

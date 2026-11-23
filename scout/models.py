@@ -179,3 +179,15 @@ class Settings(models.Model):
 
     def __str__(self):
         return f"Settings for {self.user}"
+
+
+class ShopState(models.Model):
+    """Per-shop runtime state shared by all workers: request spacing and the fetch tier that last worked."""
+
+    key = models.CharField(max_length=50, unique=True)
+    last_request_at = models.DateTimeField(null=True, blank=True)
+    preferred_tier = models.PositiveSmallIntegerField(null=True, blank=True)
+    last_success_at = models.DateTimeField(null=True, blank=True)
+
+    def __str__(self):
+        return self.key

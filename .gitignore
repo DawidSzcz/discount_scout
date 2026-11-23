@@ -3,7 +3,7 @@ __pycache__/
 .venv/
 .env
 staticfiles/
-snapshots/
+var/
 .pytest_cache/
 # raw probe captures (11 MB); curated copies go to tests/fixtures/
 research/pages/

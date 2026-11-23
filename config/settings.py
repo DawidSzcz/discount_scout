@@ -99,3 +99,8 @@ GEMINI_API_KEY = env("GEMINI_API_KEY", "")
 
 # v1 is single-user with no login: every request acts as this user (created on first use).
 SCOUT_DEFAULT_USERNAME = env("SCOUT_DEFAULT_USERNAME", "owner")
+
+# Runtime files (browser cookies, debug snapshots). Not committed.
+SCOUT_VAR_DIR = env("SCOUT_VAR_DIR", str(BASE_DIR / "var"))
+# Random gap between two requests to the same shop, in seconds (PLAN.md section 6).
+SCOUT_SHOP_GAP_SECONDS = (float(env("SCOUT_SHOP_GAP_MIN", "5")), float(env("SCOUT_SHOP_GAP_MAX", "20")))
