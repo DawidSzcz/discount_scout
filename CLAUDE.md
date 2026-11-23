@@ -12,4 +12,8 @@ Price-drop watcher for Polish online shops. Requirements: `SPEC.md`. Decisions, 
 - Start everything: `docker compose up -d` (web on http://127.0.0.1:8000, Postgres on 127.0.0.1:5432)
 - Tests (needs db container running): `uv run --env-file .env pytest -q`
 - Manage from host: `uv run --env-file .env python manage.py <cmd>`
-- New migrations: `uv run --env-file .env python manage.py makemigrations scout`
+- New migrations: `uv run --env-file .env python manage.py makemigrations scout`, then `docker compose up -d` (re-runs the `migrate` service)
+- The worker does not auto-reload: `docker compose restart worker` after changing task/check/shop code
+- Try a shop URL live (no DB writes): `uv run --env-file .env python manage.py try_url <url>`
+- Check offers now, bypassing the queue: `... manage.py check_now --offer <id> | --due | --all`
+- Save a page as a test fixture: `... manage.py capture <url> --shop <key> [--tier 2]`

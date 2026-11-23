@@ -104,3 +104,11 @@ SCOUT_DEFAULT_USERNAME = env("SCOUT_DEFAULT_USERNAME", "owner")
 SCOUT_VAR_DIR = env("SCOUT_VAR_DIR", str(BASE_DIR / "var"))
 # Random gap between two requests to the same shop, in seconds (PLAN.md section 6).
 SCOUT_SHOP_GAP_SECONDS = (float(env("SCOUT_SHOP_GAP_MIN", "5")), float(env("SCOUT_SHOP_GAP_MAX", "20")))
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {"plain": {"format": "%(asctime)s %(levelname)s %(name)s: %(message)s"}},
+    "handlers": {"console": {"class": "logging.StreamHandler", "formatter": "plain"}},
+    "loggers": {"scout": {"handlers": ["console"], "level": env("SCOUT_LOG_LEVEL", "INFO")}},
+}
