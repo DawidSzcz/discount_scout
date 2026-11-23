@@ -150,6 +150,7 @@ Example URLs from SPEC.md, one fetch each:
 - Ceneo product pages list every shop's offer (11 for SN515X), including Allegro, OleOle and Electro, so observing a Ceneo listing covers those v2 shops indirectly.
 - Euro and Media Expert show an "in instalments you only pay X" promo (e.g. 12 599,12 zł); JSON-LD carries the real cash price (13 999 zł), which is what we store.
 - Empik is a marketplace: the featured seller changes between checks and is not always the cheapest; we track the featured offer.
+- Euro (Akamai) blocks the second visit that carries the cookie from a headless session; fresh sessions pass. Euro now starts every check without saved cookies, and any tier-2 block drops that shop's saved cookies.
 
 **Takeaways:** 6 shops work with plain HTTP, 5 more with a headless browser, and 5 are still blocked. The blocked five need a tier-3 experiment before we know if they're feasible for free. Allegro will use its official API (`api.allegro.pl`, free with app registration) instead of scraping.
 

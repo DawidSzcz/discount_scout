@@ -73,12 +73,15 @@ class Ceneo(Shop):
 
 @register
 class Euro(JsonLdShop):
-    """RTV EURO AGD (Akamai). OleOle runs on the same platform (v2)."""
+    """RTV EURO AGD (Akamai). OleOle runs on the same platform (v2).
+    Akamai flags the cookie a headless session gets: the next visit carrying it is blocked,
+    while a fresh session passes (verified 2026-11-24), so every check starts clean."""
 
     key = "euro"
     name = "RTV EURO AGD"
     domains = ("euro.com.pl",)
     tiers = (2,)
+    keep_browser_cookies = False
 
 
 class MediaExpertPlatform(JsonLdShop):

@@ -12,7 +12,7 @@ from pathlib import Path
 
 from django.conf import settings
 
-from .page import Page
+from .page import Outcome, Page, classify
 
 log = logging.getLogger(__name__)
 
@@ -44,6 +44,15 @@ def _state_file(shop_key: str) -> Path:
     return d / f"{shop_key}.json"
 
 
+def _keeps_cookies(shop_key: str) -> bool:
+    from ..shops import get_shop  # lazy: shops import this package
+
+    try:
+        return get_shop(shop_key).keep_browser_cookies
+    except KeyError:
+        return True
+
+
 def fetch_tier2(url: str, shop_key: str, settle_ms: int = 6000) -> Page:
     from playwright.sync_api import Error as PlaywrightError
     from playwright.sync_api import TimeoutError as PlaywrightTimeout
@@ -51,6 +60,9 @@ def fetch_tier2(url: str, shop_key: str, settle_ms: int = 6000) -> Page:
     from playwright_stealth import Stealth
 
     state = _state_file(shop_key)
+    keep = _keeps_cookies(shop_key)
+    if not keep:
+        state.unlink(missing_ok=True)
     with Stealth().use_sync(sync_playwright()) as p:
         browser = p.chromium.launch(headless=True)
         try:
@@ -72,13 +84,26 @@ def fetch_tier2(url: str, shop_key: str, settle_ms: int = 6000) -> Page:
                 return Page(url=url, tier=2, error=f"timeout: {e}"[:500])
             except PlaywrightError as e:
                 return Page(url=url, tier=2, error=f"{type(e).__name__}: {e}"[:500])
-            try:
-                state.write_text(json.dumps(ctx.storage_state()))
-            except Exception:  # cookie persistence is best-effort
-                log.warning("could not save browser state for %s", shop_key, exc_info=True)
-            return Page(url=url, tier=2, status=status, html=html, final_url=final_url)
+            result = Page(url=url, tier=2, status=status, html=html, final_url=final_url)
+            if keep:
+                update_browser_state(state, result, ctx.storage_state)
+            return result
         finally:
             browser.close()
+
+
+def update_browser_state(state: Path, page: Page, get_state) -> None:
+    """Keep cookies after a good visit; drop them after a block. Anti-bot systems (Akamai on
+    Euro) flag the cookie itself, so reusing it after a block keeps us blocked, while a fresh
+    session gets through."""
+    if classify(page) in (Outcome.BLOCKED, Outcome.CAPTCHA):
+        state.unlink(missing_ok=True)
+        log.info("dropped browser cookies for %s after a block", state.stem)
+        return
+    try:
+        state.write_text(json.dumps(get_state()))
+    except Exception:  # cookie persistence is best-effort
+        log.warning("could not save browser state for %s", state.stem, exc_info=True)
 
 
 FETCHERS = {1: fetch_tier1, 2: fetch_tier2}

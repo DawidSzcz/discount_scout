@@ -170,3 +170,10 @@ def test_ceneo_titles_are_unescaped():
     offers = get_shop("ceneo").parse(load_fixture("ceneo", "product", tier=2))
     assert not any("&quot;" in o.title for o in offers)
     assert any('14.0"3K' in o.title for o in offers)
+
+
+def test_only_euro_starts_each_check_with_fresh_cookies():
+    from scout.fetch.fetchers import _keeps_cookies
+
+    assert _keeps_cookies("euro") is False
+    assert _keeps_cookies("ceneo") is True and _keeps_cookies("unknown-shop") is True

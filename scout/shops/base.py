@@ -31,6 +31,7 @@ class Shop:
     domains: ClassVar[tuple[str, ...]]
     kind: ClassVar[str] = "single"  # "single" | "aggregator"
     tiers: ClassVar[tuple[int, ...]] = (1, 2)  # fetch ladder, cheapest first
+    keep_browser_cookies: ClassVar[bool] = True  # tier 2: reuse cookies between checks
 
     def classify(self, page: Page) -> str:
         """Outcome of a fetched page; override for shop-specific challenges."""

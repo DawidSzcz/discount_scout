@@ -68,3 +68,17 @@ def test_no_wait_when_gap_already_passed(settings):
 
 def test_title_entities_are_decoded():
     assert Page(url="u", tier=1, status=200, html="<title>Laptop 14&quot; &amp; more</title>").title == 'Laptop 14" & more'
+
+
+def test_browser_cookies_kept_after_success_and_dropped_after_block(tmp_path):
+    import json
+
+    from scout.fetch.fetchers import update_browser_state
+
+    state = tmp_path / "euro.json"
+    ok = Page(url="u", tier=2, status=200, html="<title>Laptop ASUS</title>")
+    update_browser_state(state, ok, lambda: {"cookies": [{"name": "_abck"}]})
+    assert json.loads(state.read_text()) == {"cookies": [{"name": "_abck"}]}
+
+    update_browser_state(state, load_fixture("blocked", "euro_akamai", tier=2), lambda: pytest.fail("must not save"))
+    assert not state.exists()
