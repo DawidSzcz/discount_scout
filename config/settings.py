@@ -97,6 +97,9 @@ DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", EMAIL_HOST_USER or "discount-scou
 
 GEMINI_API_KEY = env("GEMINI_API_KEY", "")
 
+# Where alerts and summaries go if Settings.notify_email is empty.
+SCOUT_NOTIFY_EMAIL = env("SCOUT_NOTIFY_EMAIL", "")
+
 # v1 is single-user with no login: every request acts as this user (created on first use).
 SCOUT_DEFAULT_USERNAME = env("SCOUT_DEFAULT_USERNAME", "owner")
 

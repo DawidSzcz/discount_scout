@@ -2,6 +2,7 @@ from django.core.management.base import BaseCommand
 
 from scout.checks import check_offer, due_offers
 from scout.models import Offer
+from scout.notify import maybe_alert
 
 
 class Command(BaseCommand):
@@ -22,7 +23,9 @@ class Command(BaseCommand):
             qs = Offer.objects.filter(active=True)
         for o in qs.select_related("model__product__user"):
             obs = check_offer(o)
+            alerted = bool(obs) and maybe_alert(obs)
             o.refresh_from_db()
             result = f"{obs.price} {obs.currency} (tier {obs.tier_used})" if obs else "no price"
             flag = " SUSPICIOUS" if obs and obs.suspicious else ""
-            self.stdout.write(f"#{o.pk} {o}: {result}{flag} -> status={o.status}")
+            note = " ALERT SENT" if alerted else ""
+            self.stdout.write(f"#{o.pk} {o}: {result}{flag} -> status={o.status}{note}")

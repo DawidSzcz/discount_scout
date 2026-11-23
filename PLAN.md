@@ -150,11 +150,11 @@ Example URLs from SPEC.md, one fetch each:
 
 ## 10. Build order
 
-1. **Skeleton:** uv project, Django, docker-compose (web/worker/db), settings singleton, models + migrations, admin.
-2. **Fetch layer:** tier 1/2 fetchers, block detection, per-shop serialisation + jitter, fixture capture tool (`manage.py capture <url>`).
-3. **Easy shops first:** x-kom/Neonet, Morele, Deluxury, TechLord, MediaMarkt, with fixture tests.
-4. **Check loop:** scheduler, `PriceObservation`, failure handling, sanity guard.
-5. **Notifications:** all-time-low alert + summary email (Gmail SMTP).
+1. (done) **Skeleton:** uv project, Django, docker-compose (web/worker/db), settings singleton, models + migrations, admin.
+2. (done) **Fetch layer:** tier 1/2 fetchers, block detection, per-shop serialisation + jitter, fixture capture tool (`manage.py capture <url>`).
+3. (done) **Easy shops first:** x-kom/Neonet, Morele, Deluxury, TechLord, MediaMarkt, with fixture tests.
+4. (done) **Check loop:** scheduler, `PriceObservation`, failure handling, sanity guard.
+5. (done) **Notifications:** all-time-low alert + summary email (Gmail SMTP).
 6. **UI:** product list/detail, charts, manual add offer, settings.
 7. **Tier-2 shops:** Ceneo (single + aggregator), Euro, Media Expert/Avans, Empik.
 8. **Matcher** (code -> EAN -> Gemini -> review) + **discovery wizard** (Ceneo -> Gemini).

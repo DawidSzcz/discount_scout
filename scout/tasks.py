@@ -10,7 +10,8 @@ from procrastinate.contrib.django import app
 from procrastinate.exceptions import AlreadyEnqueued
 
 from .checks import check_offer, due_offers
-from .models import Offer
+from .models import Offer, Settings
+from .notify import maybe_alert, send_summary, summary_due
 
 log = logging.getLogger(__name__)
 
@@ -35,4 +36,14 @@ def check_offer_task(offer_id: int):
         offer = Offer.objects.select_related("model__product__user").get(pk=offer_id)
     except Offer.DoesNotExist:
         return  # deleted while queued
-    check_offer(offer)
+    obs = check_offer(offer)
+    if obs:
+        maybe_alert(obs)
+
+
+@app.periodic(cron="*/15 * * * *")
+@app.task(queueing_lock="send_summaries", pass_context=False)
+def send_summaries(timestamp: int):
+    for cfg in Settings.objects.select_related("user"):
+        if summary_due(cfg):
+            send_summary(cfg)
