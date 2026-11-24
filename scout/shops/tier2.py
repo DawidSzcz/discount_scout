@@ -97,13 +97,18 @@ class Euro(JsonLdShop):
     domains = ("euro.com.pl",)
     tiers = (2,)
     keep_browser_cookies = False
+    search_url = "https://www.euro.com.pl/search.bhtml?keyword={q}"
+    search_result_css = "a.product-medium-box-intro__link"
 
 
 class MediaExpertPlatform(JsonLdShop):
     """Media Expert, Avans and Electro (v2) share one platform. Note: pages also show an
-    "in instalments you only pay X" promo price; JSON-LD carries the real cash price."""
+    "in instalments you only pay X" promo price; JSON-LD carries the real cash price.
+    An exact-code search redirects straight to the product page (seen on Media Expert)."""
 
     tiers = (2,)
+    search_url = "https://www.{host}/search?query[menu_item]=&query[querystring]={q}"
+    search_result_css = "div.offer-box h2 a"
 
 
 @register
@@ -132,6 +137,8 @@ class Empik(Shop):
     name = "Empik"
     domains = ("empik.com",)
     tiers = (2,)
+    search_url = "https://www.empik.com/szukaj/produkt?q={q}"  # exact codes redirect to the product
+    search_result_css = 'a[href*=",p"]'  # product URLs end with ",p<id>,<category>"
 
     def parse(self, page):
         tree = LexborHTMLParser(page.html)

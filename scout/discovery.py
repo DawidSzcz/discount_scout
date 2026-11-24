@@ -1,10 +1,12 @@
 """Discovery for the add-product wizard (PLAN.md section 4).
 
 Stage 1, models: Ceneo search -> group hits into variants (Gemini, or regex fallback).
-Stage 2, offers: for each chosen variant, open its Ceneo listing(s). The listing itself is an
-  offer candidate (its price is the cheapest new offer across ALL shops on Ceneo). For each
+Stage 2, offers: for each chosen variant, open its Ceneo listing(s) first. The listing itself is
+  an offer candidate (its price is the cheapest new offer across ALL shops on Ceneo). For each
   supported shop in the listing, follow Ceneo's "go to shop" link to get the real product URL and
   verify the page (parse + model matching).
+  Fallback: every supported shop that Ceneo did not lead to is searched directly with the model
+  code (Shop.search_url); the top results are verified the same way.
 
 Note: each followed Ceneo link counts as a paid click for the shop. We only follow links to
 supported shops, once per shop per discovery.
@@ -20,7 +22,7 @@ from selectolax.lexbor import LexborHTMLParser
 from . import llm
 from .fetch import Outcome, polite_fetch
 from .matching import NO, UNSURE, YES, match, norm
-from .shops import get_shop, shop_for_url
+from .shops import all_shops, get_shop, shop_for_url
 from .shops.structured import parse_price
 
 log = logging.getLogger(__name__)
@@ -140,14 +142,73 @@ def _verdict(code: str, description: str, offer_data, use_llm: bool) -> tuple[st
     return (YES if same else NO), f"Gemini: {reason}"
 
 
+def _verify(shop, page, code, description, use_llm, cand: dict) -> dict:
+    """Fill verdict/reason/price/title of a candidate from the shop's own product page."""
+    if shop.classify(page) != Outcome.OK:
+        return {**cand, "verdict": UNSURE,
+                "reason": f"{shop.name} page blocked, could not verify" + (f"; Ceneo says {cand['price']} zł" if cand["price"] else "")}
+    parsed = [p for p in shop.parse(page) if p.condition == "new"]
+    if not parsed:
+        return {**cand, "verdict": UNSURE, "reason": "no price found on the shop page"}
+    p = min(parsed, key=lambda x: x.price)
+    verdict, reason = _verdict(code, description, p, use_llm)
+    return {**cand, "price": str(p.price), "title": p.title or cand["title"], "verdict": verdict, "reason": reason}
+
+
+def _fetch_ok(shop, url, fetch):
+    """Fetch along the shop's tier ladder; the first page that is not blocked, else the last one."""
+    page = None
+    for tier in shop.tiers:
+        page = fetch(url, shop.key, tier)
+        if shop.classify(page) in (Outcome.OK, Outcome.NOT_FOUND):
+            break
+    return page
+
+
+def search_shop(shop, code, description, fetch=polite_fetch, progress=_noop, use_llm=False) -> list[dict]:
+    """Fallback: search one shop for the model code and verify the top results. Returns at most one
+    candidate: the first confirmed match, else the first result that could not be ruled out.
+    Results that are other models are dropped."""
+    progress(f"{code}: searching {shop.name}...")
+    page = _fetch_ok(shop, shop.search_page_url(code), fetch)
+    if shop.classify(page) != Outcome.OK:
+        progress(f"{code}: {shop.name} search failed ({page.status or page.error}).")
+        return []
+    links = shop.search_links(page, code)
+    if not links:
+        progress(f"{code}: {shop.name} has no results.")
+        return []
+    unsure = None
+    for url in links:
+        final = clean_url(url)
+        if final == clean_url(page.final_url or ""):
+            product_page = page  # the search redirected straight to the product page
+        else:
+            product_page = _fetch_ok(shop, final, fetch)
+        cand = {"shop": shop.key, "url": final, "price": "", "seller": "", "title": "", "source": "search"}
+        cand = _verify(shop, product_page, code, description, use_llm, cand)
+        cand["reason"] = f"found by {shop.name} search; {cand['reason']}"
+        if cand["verdict"] == YES:
+            progress(f"{code}: {shop.name} {cand['price']} zł (yes).")
+            return [cand]
+        if cand["verdict"] == UNSURE and unsure is None:
+            unsure = cand
+    if unsure:
+        progress(f"{code}: {shop.name} {unsure['price'] or '?'} zł (unsure).")
+        return [unsure]
+    progress(f"{code}: {shop.name} results are other models.")
+    return []
+
+
 def find_offers(model: dict, fetch=polite_fetch, progress=_noop) -> list[dict]:
-    """Offer candidates for one variant: its Ceneo listing(s) + verified supported-shop pages."""
+    """Offer candidates for one variant: its Ceneo listing(s) + verified supported-shop pages,
+    then shop searches for the supported shops Ceneo did not lead to."""
     ceneo = get_shop("ceneo")
     code, description = model["code"], model.get("description", "")
     use_llm = llm.available()
     candidates, seen_shops, seen_urls = [], set(), set()
 
-    for pid in model["ceneo_ids"]:
+    for pid in model.get("ceneo_ids", []):
         listing_url = f"https://www.ceneo.pl/{pid}"
         progress(f"{code}: opening Ceneo listing {pid}...")
         page = fetch(listing_url, ceneo.key, 2)
@@ -165,7 +226,7 @@ def find_offers(model: dict, fetch=polite_fetch, progress=_noop) -> list[dict]:
             "shop": "ceneo", "url": listing_url, "price": str(best.price), "seller": best.seller,
             "title": page.title, "verdict": listing_match.verdict if listing_match.verdict != UNSURE else YES,
             "reason": f"Ceneo listing, {len(offers)} shops, cheapest at {best.seller}",
-            "offer_count": len(offers),
+            "offer_count": len(offers), "source": "ceneo",
         })
         seen_urls.add(listing_url)
 
@@ -179,21 +240,22 @@ def find_offers(model: dict, fetch=polite_fetch, progress=_noop) -> list[dict]:
             final = clean_url(shop_page.final_url or "")
             if shop_for_url(final) is not shop:
                 progress(f"{code}: {shop.name} link did not reach the shop ({shop_page.status or shop_page.error}).")
+                seen_shops.discard(shop.key)  # let the shop search try instead
                 continue
             if final in seen_urls:
                 continue
             seen_urls.add(final)
-            cand = {"shop": shop.key, "url": final, "price": str(o.price), "seller": "", "title": o.title}
-            if shop.classify(shop_page) != Outcome.OK:
-                cand.update(verdict=UNSURE, reason=f"{shop.name} page blocked, could not verify; Ceneo says {o.price} zł")
-            else:
-                parsed = [p for p in shop.parse(shop_page) if p.condition == "new"]
-                if not parsed:
-                    cand.update(verdict=UNSURE, reason="no price found on the shop page")
-                else:
-                    p = min(parsed, key=lambda x: x.price)
-                    verdict, reason = _verdict(code, description, p, use_llm)
-                    cand.update(price=str(p.price), title=p.title or o.title, verdict=verdict, reason=reason)
+            cand = {"shop": shop.key, "url": final, "price": str(o.price), "seller": "", "title": o.title, "source": "ceneo"}
+            cand = _verify(shop, shop_page, code, description, use_llm, cand)
             candidates.append(cand)
             progress(f"{code}: {shop.name} {cand['price']} zł ({cand['verdict']}).")
+
+    missing = [s for s in all_shops() if s.kind == "single" and s.search_url and s.key not in seen_shops]
+    if missing:
+        progress(f"{code}: Ceneo did not lead to {len(missing)} supported shop(s); searching them directly.")
+    for shop in missing:
+        for cand in search_shop(shop, code, description, fetch, progress, use_llm):
+            if cand["url"] not in seen_urls:
+                seen_urls.add(cand["url"])
+                candidates.append(cand)
     return candidates

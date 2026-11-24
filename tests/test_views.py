@@ -3,7 +3,7 @@ from decimal import Decimal
 import pytest
 from django.urls import reverse
 
-from scout.models import Offer, PriceObservation, Product, ProductModel
+from scout.models import Offer, PriceObservation, Product, ProductModel, SupportingOffer
 from scout.owner import get_owner
 
 pytestmark = pytest.mark.django_db
@@ -239,3 +239,21 @@ def test_offers_step_does_not_duplicate_observed_shops(client, offer):
     assert 'value="UX8407AA-SN515X|0"' not in page.text  # no checkbox for the observed URL
     assert 'value="UX8407AA-SN515X|1" checked' not in page.text  # same shop, other URL: not preselected
     assert "you already observe another x-kom URL" in page.text
+
+
+def test_detail_lists_unsupported_shops_from_ceneo(client, offer):
+    ceneo = Offer.objects.create(model=offer.model, shop="ceneo", kind=Offer.Kind.AGGREGATOR,
+                                 url="https://www.ceneo.pl/199125559")
+    PriceObservation.objects.create(offer=ceneo, price=Decimal("12600.29"), seller="allegro.pl", tier_used=2)
+    SupportingOffer.objects.create(source=ceneo, seller="allegro.pl", title="Zenbook", price=Decimal("12600.29"),
+                                   url="https://www.ceneo.pl/Click/Offer/?e=1")
+    SupportingOffer.objects.create(source=ceneo, seller="sferis.pl", title="Zenbook", price=Decimal("13349"))
+    html = client.get(reverse("product_detail", args=[offer.model.product_id])).content.decode()
+    assert "Other shops on Ceneo" in html
+    assert "allegro.pl" in html and "sferis.pl" in html
+    assert html.count(">lowest<") == 1  # allegro is the lowest price right now
+
+    ceneo.active = False
+    ceneo.save()
+    html = client.get(reverse("product_detail", args=[offer.model.product_id])).content.decode()
+    assert "Other shops on Ceneo" not in html  # paused listing: its sellers are hidden

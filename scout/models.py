@@ -110,6 +110,26 @@ class PriceObservation(models.Model):
         return f"{self.price} {self.currency} ({self.offer})"
 
 
+class SupportingOffer(models.Model):
+    """An offer from a shop we do not support, seen on an aggregator listing (Ceneo). Not checked
+    on its own: the set is replaced on every successful check of the listing, so it always shows
+    what the listing offered last. Shown below the main offer table of the model."""
+
+    source = models.ForeignKey(Offer, on_delete=models.CASCADE, related_name="supporting")
+    seller = models.CharField(max_length=200, help_text="Shop domain as the aggregator names it")
+    title = models.CharField(max_length=500, blank=True)
+    price = models.DecimalField(max_digits=12, decimal_places=2)
+    currency = models.CharField(max_length=3, default="PLN")
+    url = models.URLField(max_length=1000, blank=True, help_text="The aggregator's go-to-shop link")
+    seen_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ["price"]
+
+    def __str__(self):
+        return f"{self.seller} {self.price} {self.currency} (via {self.source})"
+
+
 class CheckFailure(models.Model):
     class Reason(models.TextChoices):
         BLOCKED = "blocked"

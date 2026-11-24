@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from django.db.models import Min
 from django.utils import timezone
 
-from .models import Offer, PriceObservation, Product, ProductModel
+from .models import Offer, PriceObservation, Product, ProductModel, SupportingOffer
 from .shops import get_shop
 
 
@@ -22,6 +22,7 @@ class ModelStats:
     rows: list[OfferRow] = field(default_factory=list)
     best: PriceObservation | None = None  # cheapest latest valid price across active offers
     all_time_low: PriceObservation | None = None
+    supporting: list[SupportingOffer] = field(default_factory=list)  # unsupported shops seen on Ceneo
 
 
 def model_stats(model: ProductModel) -> ModelStats:
@@ -38,10 +39,22 @@ def model_stats(model: ProductModel) -> ModelStats:
         stats.best = min(valid_latest, key=lambda o: o.price)
         for row in stats.rows:
             row.is_best = row.latest is not None and row.latest.pk == stats.best.pk
+    stats.supporting = supporting_offers(model)
+    for so in stats.supporting:
+        so.is_best = stats.best is not None and so.price <= stats.best.price
     stats.all_time_low = (
         PriceObservation.objects.filter(offer__model=model, suspicious=False).order_by("price", "fetched_at").first()
     )
     return stats
+
+
+def supporting_offers(model: ProductModel) -> list[SupportingOffer]:
+    """Unsupported shops from the model's active aggregator listings, cheapest per seller."""
+    best = {}
+    for so in SupportingOffer.objects.filter(source__model=model, source__active=True).select_related("source"):
+        if so.seller not in best or so.price < best[so.seller].price:
+            best[so.seller] = so
+    return sorted(best.values(), key=lambda so: so.price)
 
 
 def product_overview(product: Product) -> list[ModelStats]:

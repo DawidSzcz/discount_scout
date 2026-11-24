@@ -8,7 +8,7 @@ from django.utils import timezone
 from scout.checks import check_offer, due_offers
 from scout.fetch import Page
 from scout.fixtures import load_fixture
-from scout.models import CheckFailure, Offer, PriceObservation, Product, ProductModel, ShopState
+from scout.models import CheckFailure, Offer, PriceObservation, Product, ProductModel, ShopState, SupportingOffer
 from scout.owner import get_owner
 
 XKOM = load_fixture("xkom", "product")  # 13349.00 PLN
@@ -198,3 +198,21 @@ def test_aggregator_drops_other_variants_but_keeps_unsupported_shops(offer):
                                                 "Laptop Asus ZenBook Duo OLED UX8407AA-SN129X Ultra 7 32GB 1TB W11P"))
     obs = check_offer(offer, fetch_fn=fake_fetch(page))
     assert obs.price == Decimal("12499.00") and obs.seller == "techlord.pl"
+
+
+def test_aggregator_check_keeps_unsupported_shops_as_supporting_offers(offer):
+    offer.shop, offer.kind, offer.url = "ceneo", Offer.Kind.AGGREGATOR, "https://www.ceneo.pl/199125559"
+    offer.save()
+    page = load_fixture("ceneo", "product", tier=2)
+    check_offer(offer, fetch_fn=fake_fetch(page))
+    sellers = {s.seller: s for s in offer.supporting.all()}
+    assert set(sellers) == {"allegro.pl", "sklep.octacom.pl", "sferis.pl", "oleole.pl", "electro.pl"}
+    assert sellers["allegro.pl"].price == Decimal("12600.29")
+    assert sellers["allegro.pl"].url.startswith("https://www.ceneo.pl/Click/Offer/")
+    check_offer(offer, fetch_fn=fake_fetch(page))
+    assert SupportingOffer.objects.count() == 5  # replaced, not appended
+
+
+def test_single_shop_check_has_no_supporting_offers(offer):
+    check_offer(offer, fetch_fn=fake_fetch(XKOM))
+    assert not SupportingOffer.objects.exists()

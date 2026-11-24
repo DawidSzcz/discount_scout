@@ -76,6 +76,27 @@
     </table>
   </div>
 
+  {% if s.supporting %}
+  <h3>Other shops on Ceneo <span class="muted small">(not supported, so not observed directly; refreshed with every Ceneo check)</span></h3>
+  <div class="table-wrap">
+    <table class="supporting">
+      <thead>
+        <tr><th>Shop</th><th>Offer</th><th class="num">Price</th><th>Seen</th></tr>
+      </thead>
+      <tbody>
+        {% for so in s.supporting %}
+        <tr class="{% if so.is_best %}best{% endif %}">
+          <td>{% if so.url %}<a href="{{ so.url }}" target="_blank" rel="noopener">{{ so.seller }}</a>{% else %}{{ so.seller }}{% endif %}</td>
+          <td class="small">{{ so.title|truncatechars:90 }}</td>
+          <td class="num">{{ so.price|pln }}{% if so.is_best %} <span class="badge" title="The lowest price for this model right now">lowest</span>{% endif %}</td>
+          <td class="small"><span title="{{ so.seen_at|date:'Y-m-d H:i' }}">{{ so.seen_at|timesince }} ago</span></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
   <form class="add-form" method="post" action="{% url 'offer_create' s.model.pk %}">
     {% csrf_token %}
     <input type="url" name="url" required placeholder="https://www.x-kom.pl/p/... (offer URL for {{ s.model.code }})">

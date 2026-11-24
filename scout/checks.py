@@ -15,8 +15,8 @@ from django.utils import timezone
 
 from .fetch import Outcome, polite_fetch
 from .matching import NO, YES, match_offer
-from .models import CheckFailure, MatchReview, Offer, PriceObservation, Settings, ShopState
-from .shops import get_shop
+from .models import CheckFailure, MatchReview, Offer, PriceObservation, Settings, ShopState, SupportingOffer
+from .shops import get_shop, shop_for_url
 
 log = logging.getLogger(__name__)
 
@@ -100,6 +100,21 @@ def _learn_ean(model, parsed):
         model.save(update_fields=["ean"])
 
 
+def _refresh_supporting(offer: Offer, offers, now):
+    """Aggregator listing: keep its offers from shops we do not support (cheapest one per seller)."""
+    cheapest = {}
+    for o in offers:
+        if o.seller and shop_for_url(f"https://{o.seller}/") is None:
+            if o.seller not in cheapest or o.price < cheapest[o.seller].price:
+                cheapest[o.seller] = o
+    offer.supporting.all().delete()
+    SupportingOffer.objects.bulk_create([
+        SupportingOffer(source=offer, seller=o.seller, title=o.title[:500], price=o.price,
+                        currency=o.currency, url=o.seller_url, seen_at=now)
+        for o in cheapest.values()
+    ])
+
+
 def check_offer(offer: Offer, fetch_fn=polite_fetch, now=None) -> PriceObservation | None:
     """Run one check. Returns the new observation, or None if every tier failed."""
     now = now or timezone.now()
@@ -135,6 +150,8 @@ def check_offer(offer: Offer, fetch_fn=polite_fetch, now=None) -> PriceObservati
             fail(reason, tier, page, f"snapshot: {_save_snapshot(offer, page)}")
             continue
         best = min(candidates, key=lambda o: o.price)
+        if shop.kind == "aggregator":
+            _refresh_supporting(offer, candidates, now)
         if shop.kind != "aggregator" and not offer.match_confirmed:
             verdict = match_offer(offer.model, best)
             if verdict.verdict == NO:

@@ -4,10 +4,11 @@ import pytest
 
 from scout import llm
 from scout.discovery import (
-    DiscoveryError, clean_url, find_offers, group_models_by_code, parse_ceneo_search, search_models,
+    DiscoveryError, clean_url, find_offers, group_models_by_code, parse_ceneo_search, search_models, search_shop,
 )
+from scout.fetch import Page
 from scout.fixtures import load_fixture
-from scout.matching import NO, YES
+from scout.matching import NO, UNSURE, YES
 from scout.shops import get_shop
 
 SEARCH = load_fixture("ceneo", "search_zenbook_duo", tier=2)
@@ -94,14 +95,20 @@ SHOP_PAGES = {  # seller on Ceneo -> (fixture, final URL after Ceneo's redirect)
 }
 
 
+NOT_FOUND = Page(url="u", tier=1, status=404, html="<title>Nie znaleziono</title>")
+
+
 def listing_fetch():
+    """Ceneo listing + redirects to shop pages; shop searches find nothing (404)."""
     redirects = {o.seller_url: o.seller for o in get_shop("ceneo").parse(LISTING)}
     calls = []
 
     def fetch(url, key, tier):
-        calls.append(url)
+        calls.append((key, url))
         if url == "https://www.ceneo.pl/199125559":
             return LISTING
+        if key != "ceneo":
+            return NOT_FOUND
         fixture, final = SHOP_PAGES[redirects[url]]
         return replace(load_fixture(fixture, "product", tier=2), final_url=final)
 
@@ -118,7 +125,10 @@ def test_find_offers_follows_links_only_for_supported_shops():
     assert listing["price"] == "12498.00" and listing["seller"] == "deluxury.pl" and listing["verdict"] == YES
 
     assert set(cands) == {"ceneo", "deluxury", "techlord", "xkom", "neonet", "avans", "euro"}
-    assert len(fetch.calls) == 1 + 6  # listing + one link per supported shop; allegro, sferis, octacom... never
+    ceneo_calls = [u for k, u in fetch.calls if k == "ceneo"]
+    assert len(ceneo_calls) == 1 + 6  # listing + one link per supported shop; allegro, sferis, octacom... never
+    # Supported shops Ceneo did not lead to are searched directly, the others are not.
+    assert {k for k, u in fetch.calls if k != "ceneo"} == {"morele", "mediamarkt", "mediaexpert", "empik"}
     assert cands["techlord"]["url"] == "https://techlord.pl/asus-p-39087.html"  # tracking params removed
     for shop in ("deluxury", "techlord", "xkom", "neonet", "euro"):
         assert cands[shop]["verdict"] == YES, shop
@@ -138,6 +148,83 @@ def test_find_offers_uses_gemini_for_unclear_pages(settings, monkeypatch):
     cands = {c["shop"]: c for c in find_offers(
         {"code": "UX8407AA-SN515X", "description": "Ultra X9", "ceneo_ids": ["199125559"]}, fetch=fetch_without_code)}
     assert cands["xkom"]["verdict"] == YES and cands["xkom"]["reason"] == "Gemini: specs match"
+
+
+CODE = "UX8407AA-SN515X"
+REDIRECTING_SEARCH = {  # exact-code search lands on the product page
+    "mediaexpert": "https://www.mediaexpert.pl/laptopy/laptop-asus-zenbook-duo-ux8407aa-sn515x-14-oled",
+    "empik": "https://www.empik.com/asus-zenbook-duo-oled-ux8407aa-sn515x-ultra-x9,p1778781306,elektronika-p",
+}
+
+
+def shop_search_fetch():
+    """Shop searches from fixtures; every result link opens that shop's product fixture.
+    (morele, mediamarkt and avans product fixtures are OTHER models, so their results get dropped.)"""
+    calls = []
+
+    def fetch(url, key, tier):
+        calls.append((key, url))
+        shop = get_shop(key)
+        if url == shop.search_page_url(CODE):
+            if key in REDIRECTING_SEARCH:
+                return replace(load_fixture(key, "product", tier=tier), url=url, final_url=REDIRECTING_SEARCH[key])
+            return replace(load_fixture(key, "search_sn515x", tier=tier), url=url, final_url=url)
+        return replace(load_fixture(key, "product", tier=tier), url=url, final_url=url)
+
+    fetch.calls = calls
+    return fetch
+
+
+@pytest.mark.parametrize("key, expected", [
+    ("xkom", "https://www.x-kom.pl/p/1610557-"),
+    ("neonet", "https://www.neonet.pl/p/1610557-"),
+    ("morele", "https://www.morele.net/laptop-asus-zenbook-duo-oled-ux8407-ultra-x9-378h-32-gb-1-tb-w11-pro-144-hz-ux8407aa-sn515x-"),
+    ("deluxury", "https://deluxury.pl/pl/p/Laptop-Asus-ZenBook-Duo-OLED-UX8407AA-SN515X-"),
+    ("techlord", "https://techlord.pl/asus-zenbook-duo-ux8407aa-ultra-x9-378h32gb1tbw11p-oled-144hz-dotyk-p-39087"),
+    ("mediamarkt", "https://mediamarkt.pl/pl/product/_laptop-asus-zenbook-duo-oled-ux8407aa-sn515x-"),
+    ("euro", "https://www.euro.com.pl/laptopy-i-netbooki/asus-laptop-asus-zd-14-32-1-w11p-touch.bhtml"),
+    ("avans", "https://www.avans.pl/komputery-i-tablety/laptopy-i-ultrabooki/laptopy/laptop-asus-zenbook-duo-ux8407aa-sn515x-"),
+])
+def test_search_result_links(key, expected):
+    shop = get_shop(key)
+    url = shop.search_page_url(CODE)
+    links = shop.search_links(replace(load_fixture(key, "search_sn515x"), url=url, final_url=url), CODE)
+    assert links and links[0].startswith(expected)
+    assert len(links) <= shop.search_max_results
+
+
+def test_search_redirect_to_product_page_is_the_result():
+    shop = get_shop("mediaexpert")
+    url = shop.search_page_url(CODE)
+    page = replace(load_fixture("mediaexpert", "product"), url=url, final_url=REDIRECTING_SEARCH["mediaexpert"] + "#x")
+    assert shop.search_links(page, CODE) == [REDIRECTING_SEARCH["mediaexpert"]]
+
+
+def test_find_offers_falls_back_to_shop_search_without_ceneo():
+    fetch = shop_search_fetch()
+    cands = find_offers({"code": CODE, "description": "", "ceneo_ids": []}, fetch=fetch)
+    by_shop = {c["shop"]: c for c in cands}
+    assert len(cands) == len(by_shop)  # at most one candidate per shop
+    assert {k for k, c in by_shop.items() if c["verdict"] == YES} == {
+        "xkom", "neonet", "deluxury", "techlord", "euro", "mediaexpert", "empik"}
+    # MediaMarkt's fixture is a Zenbook 14 the matcher cannot rule out: shown as unsure, once.
+    # Morele and Avans fixtures are sibling variants: dropped.
+    assert by_shop["mediamarkt"]["verdict"] == UNSURE
+    assert "morele" not in by_shop and "avans" not in by_shop
+    assert all(c["source"] == "search" for c in cands)
+    assert by_shop["xkom"]["price"] == "13349.00"
+    assert by_shop["xkom"]["reason"].startswith("found by x-kom search")
+    assert by_shop["mediaexpert"]["url"] == REDIRECTING_SEARCH["mediaexpert"]
+    assert [k for k, u in fetch.calls if k == "mediaexpert"] == ["mediaexpert"]  # redirect page reused, not refetched
+    assert not any(k == "ceneo" for k, u in fetch.calls)
+
+
+def test_search_shop_drops_other_models_and_stops_at_first_match():
+    fetch = shop_search_fetch()
+    log = []
+    assert search_shop(get_shop("avans"), CODE, "", fetch, log.append) == []  # both results open the SN129X page
+    assert "results are other models" in log[-1]
+    assert search_shop(get_shop("deluxury"), CODE, "", fetch)[0]["verdict"] == YES
 
 
 def test_llm_group_models_rejects_unknown_ids(settings, monkeypatch):

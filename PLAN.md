@@ -40,6 +40,8 @@ User
              |                                  consecutive_failures, next_check_at)
              +- PriceObservation               (fetched_at, price, currency, seller?, seller_url?,
                                                 condition, tier_used, raw_snapshot_ref)
+SupportingOffer     (source: aggregator Offer, seller, title, price, url, seen_at) - Ceneo offers
+                    from shops we do not support; replaced on every check of the listing
 CheckFailure        (offer, at, reason: blocked|captcha|http_error|parse_error|no_match, tier, detail)
 MatchReview         (offer, candidate_title, candidate_url, reason, resolved)
 DiscoveryRun        (product, status, progress_log, results_json)  - drives the live wizard page
@@ -49,14 +51,17 @@ Settings            (singleton per user: check_interval_h, summary_interval_h, n
 
 - **Aggregator offers** (Allegro product page, Ceneo listing): each check saves **one** `PriceObservation`, the cheapest offer that is new and passes matching, with the seller name and a direct link.
 - **Best price for a model** = the minimum of each active offer's latest valid observation.
+- **Supporting offers:** a Ceneo check also keeps the listing's offers from unsupported shops (cheapest per seller) as `SupportingOffer` rows. The model overview lists them below the main offer table ("Other shops on Ceneo"), marking the one that is the lowest price right now. They are not checked on their own and send no alerts; their price already counts through the Ceneo offer's cheapest-offer price.
 
 ## 4. Add-product flow (wizard)
 
 1. The user enters a product name, which creates a `DiscoveryRun` job. The page polls via HTMX and shows progress live; the user can leave and come back.
-2. **Ceneo first:** search Ceneo, collect variants (model codes, EAN, specs) and the shops listed for each model.
+2. **Ceneo is the primary source of models:** search Ceneo, collect variants (model codes, EAN, specs) and the shops listed for each model.
 3. **Gemini fills gaps:** normalise model codes, add missing variants, and suggest URLs on supported shops (Google Search grounding, JSON schema output).
 4. The user picks which **models** to observe.
-5. For each chosen model, collect candidate offers on supported shops (from Ceneo's shop list, Gemini, and shop-specific lookups), and **check each candidate** by fetching it and running the matcher.
+5. For each chosen model, collect candidate offers on supported shops and **check each candidate** by fetching it and running the matcher:
+   - **Ceneo first:** the model's Ceneo listing(s), plus each supported shop listed there (via Ceneo's go-to-shop link).
+   - **Shop search fallback:** every supported shop Ceneo did not lead to (not listed, or the link failed) is searched directly with the model code (`Shop.search_url`, top 3 results verified). At most one candidate per shop: the first confirmed match, else the first result that could not be ruled out.
 6. The user picks offers per model, and can **add URLs manually**. A URL from a shop without a shop class is **rejected** ("shop not supported yet").
 7. Submit, and observation starts.
 
@@ -157,6 +162,8 @@ Example URLs from SPEC.md, one fetch each:
 - Ceneo listings with few offers are padded with "recommended" offers of other products in the same markup (a used Dell at 849 zł on the SN515X listing 199125553). The parser keeps only offers whose data-productid equals the listing id.
 - The same model often has two Ceneo listings (one titled with the model code, one with the manufacturer part number); Gemini merges them.
 
+**Shop search fallback (2026-11-24):** all 10 supported shops are searchable by model code. x-kom/Neonet results come from embedded JSON (`productLink`), the others from a CSS selector per shop; Media Expert and Empik redirect an exact-code search straight to the product page. A live search for UX8407AA-SN515X found and confirmed the model on all 10 shops in about 2.5 minutes, including Morele and MediaMarkt, which had not carried it at the 2026-11-23 probe.
+
 **Takeaways:** 6 shops work with plain HTTP, 5 more with a headless browser, and 5 are still blocked. The blocked five need a tier-3 experiment before we know if they're feasible for free. Allegro will use its official API (`api.allegro.pl`, free with app registration) instead of scraping.
 
 ## 10. Build order
@@ -168,7 +175,7 @@ Example URLs from SPEC.md, one fetch each:
 5. (done) **Notifications:** all-time-low alert + summary email (Gmail SMTP).
 6. (done) **UI:** product list/detail, charts, manual add offer, settings.
 7. (done) **Tier-2 shops:** Ceneo (single + aggregator), Euro, Media Expert/Avans, Empik.
-8. (done) **Matcher** (code -> EAN -> Gemini -> review) + **discovery wizard** (Ceneo -> Gemini).
+8. (done) **Matcher** (code -> EAN -> Gemini -> review) + **discovery wizard** (Ceneo -> Gemini), shop-search fallback, unsupported Ceneo sellers as supporting offers.
 9. *(v2)* **Allegro via official API** (aggregator shop class backed by REST, not scraping) + **tier-3 experiment** for OleOle, Electro, Komputronik, ASUS eStore.
 10. Hardening: snapshot retention, logs, backups (`pg_dump`).
 
