@@ -96,6 +96,8 @@ EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", "")
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", EMAIL_HOST_USER or "discount-scout@localhost")
 
 GEMINI_API_KEY = env("GEMINI_API_KEY", "")
+# Free keys (2026-11): only the lite model answers reliably; search grounding needs billing.
+GEMINI_MODEL = env("GEMINI_MODEL", "gemini-3.5-flash-lite")
 
 # Where alerts and summaries go if Settings.notify_email is empty.
 SCOUT_NOTIFY_EMAIL = env("SCOUT_NOTIFY_EMAIL", "")

@@ -155,7 +155,13 @@ class DiscoveryRun(models.Model):
         DONE = "done"
         FAILED = "failed"
 
+    class Stage(models.TextChoices):
+        MODELS = "models"  # searching variants
+        OFFERS = "offers"  # collecting offers for the chosen variants
+
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="discovery_runs")
+    query = models.CharField(max_length=200, default="")
+    stage = models.CharField(max_length=20, choices=Stage.choices, default=Stage.MODELS)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
     progress_log = models.JSONField(default=list, blank=True)
     results = models.JSONField(default=dict, blank=True)
@@ -164,6 +170,12 @@ class DiscoveryRun(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
+
+    def log(self, message: str):
+        from django.utils import timezone as tz
+
+        self.progress_log = [*self.progress_log, {"t": tz.now().isoformat(), "msg": message}]
+        self.save(update_fields=["progress_log"])
 
 
 class Settings(models.Model):

@@ -10,7 +10,10 @@ from procrastinate.contrib.django import app
 from procrastinate.exceptions import AlreadyEnqueued
 
 from .checks import check_offer, due_offers
-from .models import Offer, Settings
+from django.utils import timezone
+
+from .discovery import find_offers, search_models
+from .models import DiscoveryRun, Offer, Settings
 from .notify import maybe_alert, send_summary, summary_due
 
 log = logging.getLogger(__name__)
@@ -47,3 +50,39 @@ def send_summaries(timestamp: int):
     for cfg in Settings.objects.select_related("user"):
         if summary_due(cfg):
             send_summary(cfg)
+
+
+def _run_discovery(run_id: int, work):
+    run = DiscoveryRun.objects.get(pk=run_id)
+    run.status = DiscoveryRun.Status.RUNNING
+    run.save(update_fields=["status"])
+    try:
+        work(run)
+        run.status = DiscoveryRun.Status.DONE
+    except Exception as e:  # shown on the wizard page; the user can retry or add things by hand
+        log.exception("discovery %s failed", run_id)
+        run.log(f"Failed: {e}")
+        run.status = DiscoveryRun.Status.FAILED
+    run.finished_at = timezone.now()
+    run.save(update_fields=["status", "finished_at", "results"])
+
+
+@app.task(pass_context=False)
+def discover_models_task(run_id: int):
+    def work(run):
+        run.results = {**run.results, "models": search_models(run.query, progress=run.log)}
+
+    _run_discovery(run_id, work)
+
+
+@app.task(pass_context=False)
+def discover_offers_task(run_id: int):
+    def work(run):
+        offers = {}
+        for model in run.results.get("selected", []):
+            offers[model["code"]] = find_offers(model, progress=run.log)
+            run.results = {**run.results, "offers": offers}
+            run.save(update_fields=["results"])
+        run.log("Done.")
+
+    _run_discovery(run_id, work)
