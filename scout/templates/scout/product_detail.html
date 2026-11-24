@@ -40,6 +40,21 @@
     </div>
   </div>
 
+  {% for r in s.reviews %}
+  <div class="review">
+    <strong>Is this the same model?</strong>
+    <a href="{{ r.candidate_url }}" target="_blank" rel="noopener">{{ r.offer.shop|shop_name }}</a>:
+    {{ r.candidate_title|default:r.candidate_url|truncatechars:120 }}
+    <span class="muted small">({{ r.reason }})</span>
+    <div class="row" style="margin-top:6px">
+      <form class="inline" method="post" action="{% url 'review_decide' r.pk %}">{% csrf_token %}
+        <button type="submit" name="decision" value="same">Same model, keep observing</button></form>
+      <form class="inline" method="post" action="{% url 'review_decide' r.pk %}">{% csrf_token %}
+        <button class="danger" type="submit" name="decision" value="different">Different model, pause it</button></form>
+    </div>
+  </div>
+  {% endfor %}
+
   {% if s.chart.datasets %}
     <div class="chart-box"><canvas data-chart="{{ s.chart_id }}"></canvas></div>
     {{ s.chart|json_script:s.chart_id }}

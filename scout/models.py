@@ -66,6 +66,9 @@ class Offer(models.Model):
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.OK)
     active = models.BooleanField(default=True, help_text="Paused offers are not checked")
     consecutive_failures = models.PositiveIntegerField(default=0)
+    match_confirmed = models.BooleanField(
+        default=False, help_text="The page was confirmed to be this model (by code/EAN or by the user)"
+    )
     last_checked_at = models.DateTimeField(null=True, blank=True)
     next_check_at = models.DateTimeField(default=timezone.now, db_index=True)
     created_at = models.DateTimeField(auto_now_add=True)

@@ -125,3 +125,27 @@ def test_settings_save_and_validate(client):
 def test_delete_product_cascades(client, offer):
     client.post(reverse("product_delete", args=[offer.model.product.pk]))
     assert not Product.objects.exists() and not PriceObservation.objects.exists()
+
+
+def test_review_same_model_confirms_and_resumes(client, offer):
+    from scout.models import MatchReview
+
+    offer.status = Offer.Status.NEEDS_REVIEW
+    offer.save()
+    review = MatchReview.objects.create(offer=offer, candidate_title="ASUS Zenbook Duo", candidate_url=offer.url,
+                                        reason="different variant UX8407AA-SN129X")
+    page = client.get(reverse("product_detail", args=[offer.model.product.pk]))
+    assert "Is this the same model?" in page.text
+    client.post(reverse("review_decide", args=[review.pk]), {"decision": "same"})
+    offer.refresh_from_db()
+    review.refresh_from_db()
+    assert review.decision is True and offer.match_confirmed and offer.status == Offer.Status.OK
+
+
+def test_review_different_model_pauses_offer(client, offer):
+    from scout.models import MatchReview
+
+    review = MatchReview.objects.create(offer=offer, candidate_title="x", candidate_url=offer.url, reason="r")
+    client.post(reverse("review_decide", args=[review.pk]), {"decision": "different"})
+    offer.refresh_from_db()
+    assert not offer.active

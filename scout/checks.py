@@ -14,7 +14,8 @@ from django.db.models import Q
 from django.utils import timezone
 
 from .fetch import Outcome, polite_fetch
-from .models import CheckFailure, Offer, PriceObservation, Settings, ShopState
+from .matching import NO, YES, match_offer
+from .models import CheckFailure, MatchReview, Offer, PriceObservation, Settings, ShopState
 from .shops import get_shop
 
 log = logging.getLogger(__name__)
@@ -38,7 +39,7 @@ def due_offers(now=None):
     now = now or timezone.now()
     return (
         Offer.objects.filter(active=True, next_check_at__lte=now, model__active=True, model__product__active=True)
-        .exclude(status=Offer.Status.GONE)
+        .exclude(status__in=[Offer.Status.GONE, Offer.Status.NEEDS_REVIEW])
         .order_by("next_check_at")
     )
 
@@ -85,6 +86,20 @@ def is_suspicious(offer: Offer, price: Decimal, cfg: Settings, now) -> bool:
     return not confirmed
 
 
+def _ask_for_review(offer: Offer, parsed, reason: str):
+    offer.status = Offer.Status.NEEDS_REVIEW
+    if not offer.reviews.filter(decision__isnull=True).exists():
+        MatchReview.objects.create(
+            offer=offer, candidate_title=parsed.title[:500], candidate_url=offer.url, reason=reason
+        )
+
+
+def _learn_ean(model, parsed):
+    if not model.ean and parsed.ean:
+        model.ean = parsed.ean
+        model.save(update_fields=["ean"])
+
+
 def check_offer(offer: Offer, fetch_fn=polite_fetch, now=None) -> PriceObservation | None:
     """Run one check. Returns the new observation, or None if every tier failed."""
     now = now or timezone.now()
@@ -112,11 +127,23 @@ def check_offer(offer: Offer, fetch_fn=polite_fetch, now=None) -> PriceObservati
             continue
         parsed = shop.parse(page)
         candidates = [o for o in parsed if o.condition == "new"]
+        if shop.kind == "aggregator":
+            # Keep every shop on the aggregator, supported or not; drop only other models.
+            candidates = [o for o in candidates if match_offer(offer.model, o).verdict != NO]
         if not candidates:
             reason = CheckFailure.Reason.NO_MATCH if parsed else CheckFailure.Reason.PARSE_ERROR
             fail(reason, tier, page, f"snapshot: {_save_snapshot(offer, page)}")
             continue
         best = min(candidates, key=lambda o: o.price)
+        if shop.kind != "aggregator" and not offer.match_confirmed:
+            verdict = match_offer(offer.model, best)
+            if verdict.verdict == NO:
+                fail(CheckFailure.Reason.NO_MATCH, tier, page, verdict.reason)
+                _ask_for_review(offer, best, verdict.reason)
+                break
+            if verdict.verdict == YES:
+                offer.match_confirmed = True
+                _learn_ean(offer.model, best)
         suspicious = is_suspicious(offer, best.price, cfg, now)
         observation = PriceObservation.objects.create(
             offer=offer, fetched_at=now, price=best.price, currency=best.currency,
@@ -130,7 +157,7 @@ def check_offer(offer: Offer, fetch_fn=polite_fetch, now=None) -> PriceObservati
         break
 
     CheckFailure.objects.bulk_create(failures)
-    if observation is None and offer.status != Offer.Status.GONE:
+    if observation is None and offer.status not in (Offer.Status.GONE, Offer.Status.NEEDS_REVIEW):
         offer.consecutive_failures += 1
         if offer.consecutive_failures >= cfg.broken_after_failures:
             offer.status = Offer.Status.BROKEN

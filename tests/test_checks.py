@@ -146,3 +146,55 @@ def test_aggregator_check_keeps_cheapest_new_offer_with_seller(offer):
     assert obs.price == Decimal("12498.00")
     assert obs.seller == "deluxury.pl"
     assert obs.seller_url.startswith("https://www.ceneo.pl/Click/Offer/")
+
+
+def _xkom_page_for(code_in_title):
+    """The x-kom fixture with its model code swapped, to simulate a page for another variant."""
+    page = XKOM
+    return replace(page, html=page.html.replace("UX8407AA-SN515X", code_in_title))
+
+
+def test_wrong_variant_page_asks_for_review_and_stops_checking(offer):
+    from scout.models import MatchReview
+
+    obs = check_offer(offer, fetch_fn=fake_fetch(_xkom_page_for("UX8407AA-SN129X")))
+    assert obs is None
+    offer.refresh_from_db()
+    assert offer.status == Offer.Status.NEEDS_REVIEW and offer.consecutive_failures == 0
+    review = MatchReview.objects.get()
+    assert review.decision is None and "SN129X" in review.reason
+    assert CheckFailure.objects.get().reason == "no_match"
+    assert not due_offers(timezone.now() + timedelta(days=1)).exists()  # waits for the user
+
+
+def test_confirmed_match_learns_ean_and_is_remembered(offer):
+    model = offer.model
+    check_offer(offer, fetch_fn=fake_fetch(XKOM))
+    offer.refresh_from_db()
+    assert offer.match_confirmed
+    # once confirmed (or user-approved), later checks don't re-run matching
+    obs = check_offer(offer, fetch_fn=fake_fetch(_xkom_page_for("UX8407AA-SN129X")))
+    assert obs is not None
+    model.refresh_from_db()
+    assert model.ean == ""  # x-kom has no EAN in JSON-LD
+
+
+def test_ean_is_learned_from_a_confirmed_page(offer):
+    offer.shop, offer.url = "morele", "https://www.morele.net/x/"
+    offer.model.code = "UX8407AA-SN129X"
+    offer.model.save()
+    offer.save()
+    check_offer(offer, fetch_fn=fake_fetch(load_fixture("morele", "product")))
+    offer.model.refresh_from_db()
+    assert offer.model.ean == "4711636433600"
+
+
+def test_aggregator_drops_other_variants_but_keeps_unsupported_shops(offer):
+    offer.shop, offer.kind = "ceneo", Offer.Kind.AGGREGATOR
+    offer.save()
+    page = load_fixture("ceneo", "product", tier=2)
+    # turn the cheapest (deluxury, 12498) into another variant: it must be skipped
+    page = replace(page, html=page.html.replace("Laptop Asus ZenBook Duo OLED UX8407AA-SN515X Ultra X9-378H 32GB 1TB W11P",
+                                                "Laptop Asus ZenBook Duo OLED UX8407AA-SN129X Ultra 7 32GB 1TB W11P"))
+    obs = check_offer(offer, fetch_fn=fake_fetch(page))
+    assert obs.price == Decimal("12499.00") and obs.seller == "techlord.pl"

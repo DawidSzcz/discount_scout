@@ -16,5 +16,6 @@ urlpatterns = [
     path("offers/<int:pk>/toggle/", views.offer_toggle, name="offer_toggle"),
     path("offers/<int:pk>/check/", views.offer_check, name="offer_check"),
     path("offers/<int:pk>/delete/", views.offer_delete, name="offer_delete"),
+    path("reviews/<int:pk>/", views.review_decide, name="review_decide"),
     path("settings/", views.settings_view, name="settings"),
 ]

@@ -8,7 +8,7 @@ from django.views.decorators.http import require_POST
 from procrastinate.exceptions import AlreadyEnqueued
 
 from .forms import OfferForm, ProductForm, ProductModelForm, SettingsForm
-from .models import CheckFailure, Offer, Product, ProductModel
+from .models import CheckFailure, MatchReview, Offer, Product, ProductModel
 from .owner import get_owner
 from .queries import OfferRow, chart_data, model_stats, product_overview, products_with_best
 from .shops import all_shops
@@ -67,6 +67,7 @@ def product_detail(request, pk):
     for s in stats:
         s.chart = chart_data(s.model)
         s.chart_id = f"chart-{s.model.pk}"
+        s.reviews = MatchReview.objects.filter(offer__model=s.model, decision__isnull=True).select_related("offer")
     return render(request, "scout/product_detail.html", {
         "product": product,
         "stats": stats,
@@ -174,6 +175,25 @@ def offer_detail(request, pk):
         "observations": offer.observations.all()[:100],
         "failures": CheckFailure.objects.filter(offer=offer)[:50],
     })
+
+
+@require_POST
+def review_decide(request, pk):
+    review = get_object_or_404(MatchReview, pk=pk, offer__model__product__user=get_owner())
+    offer = review.offer
+    same = request.POST.get("decision") == "same"
+    review.decision = same
+    review.save(update_fields=["decision"])
+    if same:
+        offer.match_confirmed = True
+        offer.status = Offer.Status.OK
+        offer.next_check_at = timezone.now()
+        messages.success(request, f"Confirmed: {offer.shop} sells {offer.model.code}. Checking it again shortly.")
+    else:
+        offer.active = False
+        messages.success(request, f"Paused the {offer.shop} offer: it is a different model.")
+    offer.save()
+    return redirect("product_detail", pk=offer.model.product_id)
 
 
 # --- settings ------------------------------------------------------------------------------------
