@@ -9,6 +9,9 @@
     <h1>{{ product.name }} {% if not product.active %}<span class="badge">paused</span>{% endif %}</h1>
   </div>
   <div class="row">
+    <form class="inline" method="post" action="{% url 'discovery_start' product.pk %}">
+      {% csrf_token %}<button type="submit">Discover models and offers</button>
+    </form>
     <a class="button" href="{% url 'product_edit' product.pk %}">Rename / pause</a>
     <form class="inline" method="post" action="{% url 'product_delete' product.pk %}"
           onsubmit="return confirm('Delete {{ product.name|escapejs }} with all models, offers and price history?')">

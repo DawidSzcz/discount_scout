@@ -5,6 +5,11 @@ from .shops import all_shops, shop_for_url
 
 
 class ProductForm(forms.ModelForm):
+    discover = forms.BooleanField(
+        required=False, initial=True,
+        label="Find models and offers automatically (Ceneo search + Gemini)",
+    )
+
     class Meta:
         model = Product
         fields = ["name", "active"]
@@ -12,6 +17,8 @@ class ProductForm(forms.ModelForm):
     def __init__(self, *args, user, **kwargs):
         super().__init__(*args, **kwargs)
         self.user = user
+        if self.instance.pk:  # editing: discovery is started from the product page instead
+            del self.fields["discover"]
 
     def clean_name(self):
         name = self.cleaned_data["name"].strip()

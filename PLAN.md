@@ -152,6 +152,11 @@ Example URLs from SPEC.md, one fetch each:
 - Empik is a marketplace: the featured seller changes between checks and is not always the cheapest; we track the featured offer.
 - Euro (Akamai) blocks the second visit that carries the cookie from a headless session; fresh sessions pass. Euro now starts every check without saved cookies, and any tier-2 block drops that shop's saved cookies.
 
+**Step 8 findings (2026-11-24):**
+- Gemini free key: only `gemini-3.5-flash-lite` answers (JSON mode, ~5 s); Google Search grounding has no free quota (429) and the bigger flash models time out. Discovery therefore finds shop URLs by following Ceneo's "go to shop" links (only for supported shops, once per shop per discovery; each is a paid Ceneo click for the shop). With a paid key, Gemini search could replace that.
+- Ceneo listings with few offers are padded with "recommended" offers of other products in the same markup (a used Dell at 849 zł on the SN515X listing 199125553). The parser keeps only offers whose data-productid equals the listing id.
+- The same model often has two Ceneo listings (one titled with the model code, one with the manufacturer part number); Gemini merges them.
+
 **Takeaways:** 6 shops work with plain HTTP, 5 more with a headless browser, and 5 are still blocked. The blocked five need a tier-3 experiment before we know if they're feasible for free. Allegro will use its official API (`api.allegro.pl`, free with app registration) instead of scraping.
 
 ## 10. Build order
@@ -163,7 +168,7 @@ Example URLs from SPEC.md, one fetch each:
 5. (done) **Notifications:** all-time-low alert + summary email (Gmail SMTP).
 6. (done) **UI:** product list/detail, charts, manual add offer, settings.
 7. (done) **Tier-2 shops:** Ceneo (single + aggregator), Euro, Media Expert/Avans, Empik.
-8. **Matcher** (code -> EAN -> Gemini -> review) + **discovery wizard** (Ceneo -> Gemini).
+8. (done) **Matcher** (code -> EAN -> Gemini -> review) + **discovery wizard** (Ceneo -> Gemini).
 9. *(v2)* **Allegro via official API** (aggregator shop class backed by REST, not scraping) + **tier-3 experiment** for OleOle, Electro, Komputronik, ASUS eStore.
 10. Hardening: snapshot retention, logs, backups (`pg_dump`).
 

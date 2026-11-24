@@ -1,0 +1,7 @@
+{% extends "scout/base.html" %}
+{% block title %}Discover {{ run.query }} - discount_scout{% endblock %}
+{% block content %}
+<a class="small" href="{% url 'product_detail' run.product_id %}">&lt; {{ run.product.name }}</a>
+<h1>Discover "{{ run.query }}"</h1>
+{% include "scout/partials/discovery_body.html" %}
+{% endblock %}

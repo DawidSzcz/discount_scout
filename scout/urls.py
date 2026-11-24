@@ -17,5 +17,9 @@ urlpatterns = [
     path("offers/<int:pk>/check/", views.offer_check, name="offer_check"),
     path("offers/<int:pk>/delete/", views.offer_delete, name="offer_delete"),
     path("reviews/<int:pk>/", views.review_decide, name="review_decide"),
+    path("products/<int:pk>/discover/", views.discovery_start, name="discovery_start"),
+    path("discovery/<int:pk>/", views.discovery_detail, name="discovery_detail"),
+    path("discovery/<int:pk>/models/", views.discovery_models, name="discovery_models"),
+    path("discovery/<int:pk>/offers/", views.discovery_offers, name="discovery_offers"),
     path("settings/", views.settings_view, name="settings"),
 ]

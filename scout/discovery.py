@@ -114,10 +114,17 @@ def search_models(query: str, fetch=polite_fetch, progress=_noop) -> list[dict]:
 
 
 def clean_url(url: str) -> str:
-    """Drop tracking parameters Ceneo adds (utm_*, ceneo_cid...) and the fragment."""
+    """Drop what Ceneo's redirect adds: tracking parameters (utm_*, ceneo_cid...), the fragment, and
+    for shops whose product URLs need no query, the whole query (Euro adds from=ceneo&p=<price>&t=<time>,
+    which would make the URL different on every visit)."""
     parts = urlsplit(url)
-    query = [(k, v) for k, v in parse_qsl(parts.query, keep_blank_values=True) if not TRACKING_PARAMS.match(k)]
-    return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), ""))
+    shop = shop_for_url(url)
+    if shop is not None and not shop.url_needs_query:
+        query = ""
+    else:
+        query = urlencode([(k, v) for k, v in parse_qsl(parts.query, keep_blank_values=True)
+                           if not TRACKING_PARAMS.match(k)])
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, query, ""))
 
 
 def _verdict(code: str, description: str, offer_data, use_llm: bool) -> tuple[str, str]:

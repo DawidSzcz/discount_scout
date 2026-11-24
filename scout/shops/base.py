@@ -32,6 +32,7 @@ class Shop:
     kind: ClassVar[str] = "single"  # "single" | "aggregator"
     tiers: ClassVar[tuple[int, ...]] = (1, 2)  # fetch ladder, cheapest first
     keep_browser_cookies: ClassVar[bool] = True  # tier 2: reuse cookies between checks
+    url_needs_query: ClassVar[bool] = False  # product URLs work without ?query (discovery strips it)
 
     def classify(self, page: Page) -> str:
         """Outcome of a fetched page; override for shop-specific challenges."""

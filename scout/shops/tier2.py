@@ -9,7 +9,7 @@ from selectolax.lexbor import LexborHTMLParser
 
 from ..fetch import Outcome
 from .base import OfferData, Shop, register
-from .structured import JsonLdShop, parse_price
+from .structured import JsonLdShop, find_products, jsonld_nodes, parse_price
 
 # Offer titles that mean "not new". Ceneo and marketplaces mix these into the offer list.
 NOT_NEW = re.compile(
@@ -37,6 +37,7 @@ class Ceneo(Shop):
     domains = ("ceneo.pl",)
     kind = "aggregator"
     tiers = (2,)  # tier 1 gets a JS challenge page with status 200
+    url_needs_query = True
 
     def classify(self, page):
         outcome = super().classify(page)
@@ -46,11 +47,25 @@ class Ceneo(Shop):
             return Outcome.BLOCKED
         return outcome
 
+    @staticmethod
+    def listing_id(page) -> str | None:
+        """Ceneo product id of the page: JSON-LD Product.sku, else the number in the URL."""
+        for product in find_products(jsonld_nodes(page.html)):
+            if str(product.get("sku") or "").isdigit():
+                return str(product["sku"])
+        m = re.search(r"ceneo\.pl/(\d+)", page.final_url or page.url or "")
+        return m.group(1) if m else None
+
     def parse(self, page):
         tree = LexborHTMLParser(page.html)
+        own_id = self.listing_id(page)
         offers = []
         for item in tree.css("li.product-offers__list__item"):
             attrs = item.attributes
+            # Listings with few offers are padded with "recommended" offers of OTHER products in the
+            # same markup (e.g. a used Dell next to 2 Zenbook offers); keep only this listing's own.
+            if own_id and attrs.get("data-productid") != own_id:
+                continue
             price = parse_price(attrs.get("data-price"))
             if price is None or price <= 0:
                 continue

@@ -149,3 +149,93 @@ def test_review_different_model_pauses_offer(client, offer):
     client.post(reverse("review_decide", args=[review.pk]), {"decision": "different"})
     offer.refresh_from_db()
     assert not offer.active
+
+
+# --- discovery wizard ----------------------------------------------------------------------------
+
+from scout.models import DiscoveryRun  # noqa: E402
+
+
+def _models_run(product):
+    return DiscoveryRun.objects.create(product=product, query=product.name, status="done", results={"models": [
+        {"code": "UX8407AA-SN515X", "description": "Ultra X9", "ceneo_ids": ["199125559"], "min_price": "12498.00",
+         "names": ["Laptop Asus Zenbook Duo UX8407AA-SN515X"]},
+        {"code": "UX8406CAIS99T", "description": "Ultra 9", "ceneo_ids": ["192536248"], "min_price": "10999.00",
+         "names": ["Laptop Asus ZenBook Duo UX8406CA (UX8406CAIS99T)"]},
+    ]})
+
+
+def test_create_with_discovery_starts_a_run(client):
+    r = client.post(reverse("product_create"), {"name": "Zenbook Duo", "active": "on", "discover": "on"})
+    run = DiscoveryRun.objects.get()
+    assert r.url == reverse("discovery_detail", args=[run.pk])
+    assert run.query == "Zenbook Duo" and run.stage == "models"
+    page = client.get(r.url)
+    assert "Step 1 of 2" in page.text and 'hx-trigger="every 2s"' in page.text  # polls while running
+
+
+def test_edit_form_has_no_discover_checkbox(client, model):
+    r = client.get(reverse("product_edit", args=[model.product.pk]))
+    assert "Find models and offers automatically" not in r.text
+
+
+def test_models_step_shows_choices_and_creates_models(client, model):
+    run = _models_run(model.product)
+    page = client.get(reverse("discovery_detail", args=[run.pk]))
+    assert "Which models do you want to observe?" in page.text and "every 2s" not in page.text
+    assert "already added" in page.text  # SN515X exists on the product
+    r = client.post(reverse("discovery_models", args=[run.pk]), {"pick": ["0", "1"], "code_0": "UX8407AA-SN515X",
+                                                                 "code_1": "ux8406ca-is99t"})
+    assert r.status_code == 302
+    codes = set(model.product.variants.values_list("code", flat=True))
+    assert codes == {"UX8407AA-SN515X", "UX8406CA-IS99T"}  # edited code used, existing one not duplicated
+    run.refresh_from_db()
+    assert run.stage == "offers" and run.status == "pending"
+    assert [m["code"] for m in run.results["selected"]] == ["UX8407AA-SN515X", "UX8406CA-IS99T"]
+
+
+def test_models_step_requires_a_choice(client, model):
+    run = _models_run(model.product)
+    r = client.post(reverse("discovery_models", args=[run.pk]), {}, follow=True)
+    assert "Pick at least one model" in r.text
+
+
+def test_offers_step_preselects_verified_and_creates_offers(client, model):
+    run = DiscoveryRun.objects.create(product=model.product, query="q", stage="offers", status="done", results={
+        "offers": {"UX8407AA-SN515X": [
+            {"shop": "ceneo", "url": "https://www.ceneo.pl/199125559", "price": "12498.00", "seller": "deluxury.pl",
+             "title": "t", "verdict": "yes", "reason": "Ceneo listing", "offer_count": 10},
+            {"shop": "ceneo", "url": "https://www.ceneo.pl/199125553", "price": "13125.49", "seller": "x",
+             "title": "t", "verdict": "yes", "reason": "Ceneo listing", "offer_count": 2},
+            {"shop": "techlord", "url": "https://techlord.pl/p-39087.html", "price": "12499.00", "seller": "",
+             "title": "t", "verdict": "yes", "reason": "model code found"},
+            {"shop": "avans", "url": "https://www.avans.pl/sn129x", "price": "11399.00", "seller": "",
+             "title": "t", "verdict": "no", "reason": "different variant UX8407AA-SN129X"},
+        ]}})
+    page = client.get(reverse("discovery_detail", args=[run.pk]))
+    assert 'value="UX8407AA-SN515X|0" checked' in page.text  # main Ceneo listing
+    assert 'value="UX8407AA-SN515X|1" >' in page.text or 'value="UX8407AA-SN515X|1" ' in page.text
+    assert 'value="UX8407AA-SN515X|1" checked' not in page.text  # smaller duplicate listing
+    assert 'value="UX8407AA-SN515X|3" checked' not in page.text  # different model
+    client.post(reverse("discovery_offers", args=[run.pk]), {"offer": ["UX8407AA-SN515X|0", "UX8407AA-SN515X|2"]})
+    offers = {o.shop: o for o in Offer.objects.filter(model=model)}
+    assert set(offers) == {"ceneo", "techlord"}
+    assert offers["ceneo"].kind == "aggregator" and offers["techlord"].match_confirmed
+    run.refresh_from_db()
+    assert run.results["applied"]
+
+
+
+def test_offers_step_does_not_duplicate_observed_shops(client, offer):
+    # offer fixture: x-kom URL already observed for the model
+    run = DiscoveryRun.objects.create(product=offer.model.product, query="q", stage="offers", status="done", results={
+        "offers": {"UX8407AA-SN515X": [
+            {"shop": "xkom", "url": XKOM_URL, "price": "13349.00", "seller": "", "title": "t", "verdict": "yes", "reason": "r"},
+            {"shop": "xkom", "url": XKOM_URL + "?v=2", "price": "13349.00", "seller": "", "title": "t", "verdict": "yes",
+             "reason": "r"},
+        ]}})
+    page = client.get(reverse("discovery_detail", args=[run.pk]))
+    assert "already observed" in page.text
+    assert 'value="UX8407AA-SN515X|0"' not in page.text  # no checkbox for the observed URL
+    assert 'value="UX8407AA-SN515X|1" checked' not in page.text  # same shop, other URL: not preselected
+    assert "you already observe another x-kom URL" in page.text

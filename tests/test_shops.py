@@ -177,3 +177,13 @@ def test_only_euro_starts_each_check_with_fresh_cookies():
 
     assert _keeps_cookies("euro") is False
     assert _keeps_cookies("ceneo") is True and _keeps_cookies("unknown-shop") is True
+
+
+def test_ceneo_ignores_recommended_offers_of_other_products():
+    # Listing 199125553 has 2 real offers and ~70 recommendations (used Dell, Chromebook, ROG...)
+    page = load_fixture("ceneo", "listing_199125553", tier=2)
+    ceneo = get_shop("ceneo")
+    assert ceneo.listing_id(page) == "199125553"
+    offers = ceneo.parse(page)
+    assert sorted((str(o.price), o.seller) for o in offers) == [("13125.49", "remedial.sklep.pl"), ("13349.00", "1.pl")]
+    assert all("UX8407AA-SN515X" in o.title for o in offers)

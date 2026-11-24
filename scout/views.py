@@ -8,7 +8,7 @@ from django.views.decorators.http import require_POST
 from procrastinate.exceptions import AlreadyEnqueued
 
 from .forms import OfferForm, ProductForm, ProductModelForm, SettingsForm
-from .models import CheckFailure, MatchReview, Offer, Product, ProductModel
+from .models import CheckFailure, DiscoveryRun, MatchReview, Offer, Product, ProductModel
 from .owner import get_owner
 from .queries import OfferRow, chart_data, model_stats, product_overview, products_with_best
 from .shops import all_shops
@@ -39,6 +39,8 @@ def product_create(request):
         product = form.save(commit=False)
         product.user = get_owner()
         product.save()
+        if form.cleaned_data["discover"]:
+            return redirect("discovery_detail", pk=_start_discovery(product).pk)
         messages.success(request, f"Added {product.name}. Now add the exact models you want to observe.")
         return redirect("product_detail", pk=product.pk)
     return render(request, "scout/product_form.html", {"form": form, "title": "Add product"})
@@ -74,6 +76,114 @@ def product_detail(request, pk):
         "model_form": ProductModelForm(product=product),
         "shops": sorted(all_shops(), key=lambda s: s.name),
     })
+
+
+# --- discovery wizard ----------------------------------------------------------------------------
+
+
+def _start_discovery(product) -> DiscoveryRun:
+    from .tasks import discover_models_task
+
+    run = DiscoveryRun.objects.create(product=product, query=product.name)
+    with transaction.atomic():
+        discover_models_task.defer(run_id=run.pk)
+    return run
+
+
+@require_POST
+def discovery_start(request, pk):
+    return redirect("discovery_detail", pk=_start_discovery(_product(pk)).pk)
+
+
+def _run(pk):
+    return get_object_or_404(DiscoveryRun, pk=pk, product__user=get_owner())
+
+
+def _offer_rows(run):
+    """Offer candidates grouped by model, with the default selection."""
+    groups = []
+    for code, cands in run.results.get("offers", {}).items():
+        existing = Offer.objects.filter(model__product=run.product, model__code=code)
+        known_urls = set(existing.values_list("url", flat=True))
+        known_shops = set(existing.values_list("shop", flat=True))
+        listings = [c for c in cands if c["shop"] == "ceneo"]
+        main_listing = max(listings, key=lambda c: c.get("offer_count", 0), default=None)
+        rows = []
+        for i, c in enumerate(cands):
+            observed = c["url"] in known_urls
+            same_shop = not observed and c["shop"] in known_shops
+            preselect = (c["verdict"] == "yes" and not observed and not same_shop
+                         and (c["shop"] != "ceneo" or c is main_listing))
+            rows.append({**c, "key": f"{code}|{i}", "checked": preselect, "observed": observed, "same_shop": same_shop})
+        groups.append({"code": code, "rows": rows})
+    return groups
+
+
+def discovery_detail(request, pk):
+    run = _run(pk)
+    existing = set(run.product.variants.values_list("code", flat=True))
+    ctx = {
+        "run": run,
+        "running": run.status in (DiscoveryRun.Status.PENDING, DiscoveryRun.Status.RUNNING),
+        "models": [{**m, "idx": i, "exists": m["code"] in existing} for i, m in enumerate(run.results.get("models", []))],
+        "offer_groups": _offer_rows(run),
+        "applied": run.results.get("applied", False),
+    }
+    template = "scout/partials/discovery_body.html" if request.headers.get("HX-Request") else "scout/discovery.html"
+    return render(request, template, ctx)
+
+
+@require_POST
+def discovery_models(request, pk):
+    from .tasks import discover_offers_task
+
+    run = _run(pk)
+    found = run.results.get("models", [])
+    selected = []
+    for idx in request.POST.getlist("pick"):
+        try:
+            m = found[int(idx)]
+        except (ValueError, IndexError):
+            continue
+        code = request.POST.get(f"code_{idx}", m["code"]).strip().upper() or m["code"]
+        selected.append({**m, "code": code})
+    if not selected:
+        messages.error(request, "Pick at least one model, or add models by hand on the product page.")
+        return redirect("discovery_detail", pk=run.pk)
+    for m in selected:
+        ProductModel.objects.get_or_create(product=run.product, code=m["code"])
+    run.results = {**run.results, "selected": selected}
+    run.stage, run.status = DiscoveryRun.Stage.OFFERS, DiscoveryRun.Status.PENDING
+    run.save(update_fields=["results", "stage", "status"])
+    run.log(f"Looking for offers for {', '.join(m['code'] for m in selected)}...")
+    with transaction.atomic():
+        discover_offers_task.defer(run_id=run.pk)
+    return redirect("discovery_detail", pk=run.pk)
+
+
+@require_POST
+def discovery_offers(request, pk):
+    from .shops import get_shop
+
+    run = _run(pk)
+    chosen = set(request.POST.getlist("offer"))
+    created = 0
+    for group in _offer_rows(run):
+        model = ProductModel.objects.filter(product=run.product, code=group["code"]).first()
+        if model is None:
+            continue
+        for row in group["rows"]:
+            if row["key"] not in chosen:
+                continue
+            shop = get_shop(row["shop"])
+            _, new = Offer.objects.get_or_create(model=model, url=row["url"], defaults={
+                "shop": shop.key, "kind": shop.kind, "match_confirmed": row["verdict"] == "yes",
+            })
+            created += new
+    run.results = {**run.results, "applied": True}
+    run.save(update_fields=["results"])
+    messages.success(request, f"Now observing {created} new offer(s). First checks within 5 minutes.")
+    return redirect("product_detail", pk=run.product_id)
 
 
 # --- models --------------------------------------------------------------------------------------

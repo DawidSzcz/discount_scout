@@ -69,7 +69,19 @@ def test_search_blocked_raises():
 def test_clean_url():
     assert clean_url("https://techlord.pl/asus-p-39087.html?utm_source=ceneo&utm_medium=referral&ceneo_cid=1a4f#x") \
         == "https://techlord.pl/asus-p-39087.html"
-    assert clean_url("https://shop.pl/p?id=5&utm_source=ceneo") == "https://shop.pl/p?id=5"
+    assert clean_url("https://shop.pl/p?id=5&utm_source=ceneo") == "https://shop.pl/p?id=5"  # unknown shop: keep id
+    euro = ("https://www.euro.com.pl/laptopy-i-netbooki/asus-laptop-asus-zd-14-32-1-w11p-touch.bhtml"
+            "?from=ceneo&p=13999.00&cr=0&t=20261124-0624&utm_source=ceneo&ceneo_cid=3dda")
+    assert clean_url(euro) == "https://www.euro.com.pl/laptopy-i-netbooki/asus-laptop-asus-zd-14-32-1-w11p-touch.bhtml"
+
+
+def test_redirect_links_are_recognised():
+    from scout.fetch.fetchers import is_redirect_link
+
+    assert is_redirect_link("https://www.ceneo.pl/Click/Offer/?e=abc")
+    assert is_redirect_link("https://redirect.ceneo.pl/offers/181252104/10772?e=x")
+    assert not is_redirect_link("https://www.ceneo.pl/199125559")
+    assert not is_redirect_link("https://www.x-kom.pl/Click/x")
 
 
 SHOP_PAGES = {  # seller on Ceneo -> (fixture, final URL after Ceneo's redirect)

@@ -7,6 +7,7 @@ Price-drop watcher for Polish online shops. Requirements: `SPEC.md`. Decisions, 
 - Python 3.12 via `uv`; Django + HTMX; Postgres; Procrastinate for jobs.
 - v1 is single-user, localhost, no login: use `scout.owner.get_owner()` wherever a user is needed.
 - UI: server-rendered Django templates + HTMX for row actions; htmx and Chart.js are vendored in `scout/static/scout/vendor/` (no CDN).
+- Gemini (`scout/llm.py`) is used only in discovery, never in price checks; tests blank `GEMINI_API_KEY` so they never call the API.
 - One Python class per shop; every shop needs fixture tests under `tests/fixtures/<shop>/`.
 
 ## Commands

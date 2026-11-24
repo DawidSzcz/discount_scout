@@ -1,3 +1,5 @@
+from decimal import Decimal, InvalidOperation
+
 from django import template
 
 from scout.notify import fmt_price, offer_link as _offer_link
@@ -10,7 +12,12 @@ STATUS_CLASS = {"ok": "ok", "suspicious": "warn", "needs_review": "warn", "block
 
 @register.filter
 def pln(value):
-    return fmt_price(value) if value is not None else ""
+    if value is None or value == "":
+        return ""
+    try:
+        return fmt_price(Decimal(str(value)))  # discovery results store prices as strings
+    except InvalidOperation:
+        return str(value)
 
 
 @register.filter

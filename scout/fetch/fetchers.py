@@ -9,6 +9,7 @@ Tier 3 (real Chrome profile) is postponed to v2.
 import json
 import logging
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from django.conf import settings
 
@@ -76,6 +77,11 @@ def fetch_tier2(url: str, shop_key: str, settle_ms: int = 6000) -> Page:
             page = ctx.new_page()
             try:
                 resp = page.goto(url, wait_until="domcontentloaded", timeout=TIMEOUT_S * 1000)
+                if is_redirect_link(url):  # wait until the redirect chain has left the aggregator
+                    try:
+                        page.wait_for_url(lambda u: not _host(u).endswith("ceneo.pl"), timeout=20000)
+                    except PlaywrightTimeout:
+                        pass
                 page.wait_for_timeout(settle_ms)  # let JS challenges and price widgets finish
                 html = page.content()
                 status = resp.status if resp else None
@@ -90,6 +96,15 @@ def fetch_tier2(url: str, shop_key: str, settle_ms: int = 6000) -> Page:
             return result
         finally:
             browser.close()
+
+
+def _host(url: str) -> str:
+    return (urlsplit(url).hostname or "").lower()
+
+
+def is_redirect_link(url: str) -> bool:
+    """Ceneo "go to shop" links: /Click/Offer/... on ceneo.pl or redirect.ceneo.pl."""
+    return _host(url).endswith("ceneo.pl") and ("/Click/" in url or _host(url).startswith("redirect."))
 
 
 def update_browser_state(state: Path, page: Page, get_state) -> None:

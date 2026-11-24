@@ -1,0 +1,100 @@
+{% load scout_tags %}<div id="discovery" {% if running %}hx-get="{% url 'discovery_detail' run.pk %}" hx-trigger="every 2s" hx-swap="outerHTML"{% endif %}>
+
+<div class="card">
+  <div class="row">
+    {% if running %}<span class="spinner"></span>{% endif %}
+    <strong>
+      {% if run.stage == "models" %}Step 1 of 2: finding models{% else %}Step 2 of 2: finding and verifying offers{% endif %}
+    </strong>
+    {% if run.status == "failed" %}<span class="badge bad">failed</span>
+    {% elif running %}<span class="badge">working</span>
+    {% else %}<span class="badge ok">done</span>{% endif %}
+  </div>
+  {% if run.stage == "offers" and running %}
+    <p class="muted small">Each supported shop's page is opened in a browser to confirm the model and price. This takes a few minutes; you can leave this page and come back.</p>
+  {% endif %}
+  <div class="log">{% for line in run.progress_log %}<div>{{ line.msg }}</div>{% empty %}<div class="muted">Starting...</div>{% endfor %}</div>
+</div>
+
+{% if not running and run.stage == "models" %}
+  {% if models %}
+  <form class="card" method="post" action="{% url 'discovery_models' run.pk %}">
+    {% csrf_token %}
+    <h2>Which models do you want to observe?</h2>
+    <p class="muted small">Codes come from Ceneo and Gemini; correct one if it looks wrong before continuing.</p>
+    <div class="table-wrap">
+      <table class="pick">
+        <thead><tr><th></th><th>Model code</th><th>Specs</th><th class="num">From</th><th>On Ceneo as</th></tr></thead>
+        <tbody>
+        {% for m in models %}
+          <tr>
+            <td><input type="checkbox" name="pick" value="{{ m.idx }}" id="pick-{{ m.idx }}" {% if m.exists %}checked{% endif %}></td>
+            <td><input type="text" name="code_{{ m.idx }}" value="{{ m.code }}" aria-label="model code">
+              {% if m.exists %}<span class="badge">already added</span>{% endif %}</td>
+            <td class="small">{{ m.description }}</td>
+            <td class="num">{% if m.min_price %}{{ m.min_price|pln }}{% else %}-{% endif %}</td>
+            <td class="small muted">{% for n in m.names %}{{ n|truncatechars:70 }}{% if not forloop.last %}<br>{% endif %}{% endfor %}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <button class="primary" type="submit">Find offers for the selected models</button>
+      <a href="{% url 'product_detail' run.product_id %}">Skip, I'll add models by hand</a>
+    </div>
+  </form>
+  {% elif run.status == "done" %}
+  <div class="card empty">
+    <p>No models found on Ceneo for "{{ run.query }}".</p>
+    <a class="button" href="{% url 'product_detail' run.product_id %}">Add models by hand</a>
+  </div>
+  {% else %}
+  <div class="card empty"><a class="button" href="{% url 'product_detail' run.product_id %}">Back to the product</a></div>
+  {% endif %}
+{% endif %}
+
+{% if run.stage == "offers" and offer_groups %}
+  {% if applied %}
+  <div class="card">These offers were added. <a href="{% url 'product_detail' run.product_id %}">Go to the product</a>.</div>
+  {% elif not running %}
+  <form class="card" method="post" action="{% url 'discovery_offers' run.pk %}">
+    {% csrf_token %}
+    <h2>Which offers should be observed?</h2>
+    <p class="muted small">Verified offers are pre-selected. A Ceneo listing tracks the cheapest new offer across every shop on Ceneo, including shops we can't check directly.</p>
+    {% for g in offer_groups %}
+    <h3>{{ g.code }}</h3>
+    <div class="table-wrap">
+      <table class="pick">
+        <thead><tr><th></th><th>Shop</th><th class="num">Price</th><th>Check</th><th>Page</th></tr></thead>
+        <tbody>
+        {% for r in g.rows %}
+          <tr class="verdict-{{ r.verdict }}">
+            <td>{% if r.observed %}<span class="badge ok" title="already observed">ok</span>{% else %}<input type="checkbox" name="offer" value="{{ r.key }}" {% if r.checked %}checked{% endif %}>{% endif %}</td>
+            <td>{{ r.shop|shop_name }}{% if r.seller %} <span class="muted small">(cheapest: {{ r.seller }})</span>{% endif %}
+              {% if r.observed %}<br><span class="muted small">already observed</span>
+              {% elif r.same_shop %}<br><span class="muted small">you already observe another {{ r.shop|shop_name }} URL</span>{% endif %}</td>
+            <td class="num">{{ r.price|pln }}</td>
+            <td><span class="badge {% if r.verdict == 'yes' %}ok{% elif r.verdict == 'no' %}bad{% else %}warn{% endif %}">
+              {% if r.verdict == 'yes' %}same model{% elif r.verdict == 'no' %}different model{% else %}unsure{% endif %}</span>
+              <span class="muted small">{{ r.reason }}</span></td>
+            <td class="small"><a href="{{ r.url }}" target="_blank" rel="noopener">{{ r.title|default:r.url|truncatechars:60 }}</a></td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endfor %}
+    <div class="row" style="margin-top:12px">
+      <button class="primary" type="submit">Start observing the selected offers</button>
+      <a href="{% url 'product_detail' run.product_id %}">Skip</a>
+    </div>
+  </form>
+  {% endif %}
+{% elif run.stage == "offers" and not running %}
+  <div class="card empty">
+    <p>No offers found. You can paste offer URLs on the product page.</p>
+    <a class="button" href="{% url 'product_detail' run.product_id %}">Go to the product</a>
+  </div>
+{% endif %}
+</div>
