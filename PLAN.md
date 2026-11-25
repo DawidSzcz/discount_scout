@@ -7,6 +7,7 @@ Decisions come from the design interview (2026-11-23). The original requirements
 - **v1 is for one user** (the owner). It runs on the owner's Linux PC and is reachable only at `localhost`, with **no login**.
 - **Designed to go public later.** Every user-owned table has a `user_id` FK (pointing at a single seeded user in v1), so adding auth later means no data migration.
 - **v1 shops (11, all confirmed working in the probe):** x-kom, Neonet, Morele, Deluxury, TechLord, MediaMarkt (tier 1); Ceneo, Euro, Media Expert, Avans, Empik (tier 2).
+- **Added 2026-11-25 (19 shops in total):** AGDsmart, ElektroHome, KuchniaSklep, eLazienki, AGDstyle, ElectroPoland, Smeg (official store), PiekneKuchnie. Found as unsupported sellers on the Smeg FAB32LRD6 Ceneo listing; all work with plain HTTP (tier 1). No shop search for them yet, so discovery reaches them only through Ceneo.
 - **Postponed to v2:** Allegro (via official API), OleOle, Electro, Komputronik, ASUS eStore (all blocked; need tier 3 or the API).
 - **Out of scope for v1:** a seller/offer blocklist ("not trusted enough"), paid proxies or scraping APIs, non-PLN currencies, and other notification channels.
 
@@ -164,6 +165,8 @@ Example URLs from SPEC.md, one fetch each:
 
 **Shop search fallback (2026-11-24):** all 10 supported shops are searchable by model code. x-kom/Neonet results come from embedded JSON (`productLink`), the others from a CSS selector per shop; Media Expert and Empik redirect an exact-code search straight to the product page. A live search for UX8407AA-SN515X found and confirmed the model on all 10 shops in about 2.5 minutes, including Morele and MediaMarkt, which had not carried it at the 2026-11-23 probe.
 
+**Small-shop probe (2026-11-25, Smeg FAB32LRD6 Ceneo listing):** 7 of the 9 unsupported sellers parse with the generic JSON-LD/microdata parsers over plain HTTP; PiekneKuchnie (WooCommerce, no structured data) gets a small parser reading the add-to-cart form's GTM data. OleOle is still blocked: unlike Euro, a fresh headless session is blocked on product pages from the first visit (the homepage loads, the product page after it does not), so it stays a tier-3 candidate. Some shops append per-click tokens to Ceneo's redirect URLs (`?2204445BKQ=`); `clean_url` drops blank-valued parameters.
+
 **Takeaways:** 6 shops work with plain HTTP, 5 more with a headless browser, and 5 are still blocked. The blocked five need a tier-3 experiment before we know if they're feasible for free. Allegro will use its official API (`api.allegro.pl`, free with app registration) instead of scraping.
 
 ## 10. Build order
@@ -183,4 +186,3 @@ Example URLs from SPEC.md, one fetch each:
 
 - *(v2)* Allegro API: register an app at developer.allegro.pl; confirm which endpoints give offers + prices for a product (`/sale/products`, `/offers/listing`) and their auth/rate limits.
 - *(v2)* Tier 3 needs a headed Chrome (an X display) inside Docker. Run that worker natively on the host instead?
-- Gemini free-tier limits for grounding calls: check before step 8.

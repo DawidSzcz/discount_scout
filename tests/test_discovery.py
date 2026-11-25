@@ -71,6 +71,9 @@ def test_clean_url():
     assert clean_url("https://techlord.pl/asus-p-39087.html?utm_source=ceneo&utm_medium=referral&ceneo_cid=1a4f#x") \
         == "https://techlord.pl/asus-p-39087.html"
     assert clean_url("https://shop.pl/p?id=5&utm_source=ceneo") == "https://shop.pl/p?id=5"  # unknown shop: keep id
+    assert clean_url("https://shop.pl/p?id=5&2204445BKQ=") == "https://shop.pl/p?id=5"  # per-click token
+    assert clean_url("https://agdsmart.pl/smeg-fab32lrd6,id128372.html?EX875LX67E=") \
+        == "https://agdsmart.pl/smeg-fab32lrd6,id128372.html"
     euro = ("https://www.euro.com.pl/laptopy-i-netbooki/asus-laptop-asus-zd-14-32-1-w11p-touch.bhtml"
             "?from=ceneo&p=13999.00&cr=0&t=20261124-0624&utm_source=ceneo&ceneo_cid=3dda")
     assert clean_url(euro) == "https://www.euro.com.pl/laptopy-i-netbooki/asus-laptop-asus-zd-14-32-1-w11p-touch.bhtml"

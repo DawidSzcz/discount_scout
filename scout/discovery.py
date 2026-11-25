@@ -124,8 +124,9 @@ def clean_url(url: str) -> str:
     if shop is not None and not shop.url_needs_query:
         query = ""
     else:
+        # Blank-valued keys are per-click tokens some shops add (kuchniasklep.pl/...?2204445BKQ=)
         query = urlencode([(k, v) for k, v in parse_qsl(parts.query, keep_blank_values=True)
-                           if not TRACKING_PARAMS.match(k)])
+                           if v and not TRACKING_PARAMS.match(k)])
     return urlunsplit((parts.scheme, parts.netloc, parts.path, query, ""))
 
 

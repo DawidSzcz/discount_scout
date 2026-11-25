@@ -187,3 +187,57 @@ def test_ceneo_ignores_recommended_offers_of_other_products():
     offers = ceneo.parse(page)
     assert sorted((str(o.price), o.seller) for o in offers) == [("13125.49", "remedial.sklep.pl"), ("13349.00", "1.pl")]
     assert all("UX8407AA-SN515X" in o.title for o in offers)
+
+
+# Smaller shops found on the FAB32LRD6 Ceneo listing (2026-11-25 probe).
+SMALL = {
+    "agdsmart": dict(price="7149.00", mpn="FAB32LRD6", ean="8017709350178", in_stock=True),
+    "elektrohome": dict(price="7149.00", ean="8017709350178", in_stock=True),
+    "kuchniasklep": dict(price="7599.00", mpn="FAB32LRD6", in_stock=True),
+    "elazienki": dict(price="8074.00", in_stock=True),
+    "agdstyle": dict(price="8359.00", mpn="FAB32LRD6", ean="8017709350178"),
+    "electropoland": dict(price="8549.00", in_stock=True),
+    "smeg": dict(price="9784.00"),
+    "pieknekuchnie": dict(price="8074.00", mpn="FAB32LRD6", in_stock=None),  # on backorder
+}
+
+
+@pytest.mark.parametrize("shop_key", SMALL)
+def test_parse_small_shops(shop_key):
+    from scout.matching import YES, match
+
+    exp = SMALL[shop_key]
+    offers = get_shop(shop_key).parse(load_fixture(shop_key, "product"))
+    assert len(offers) == 1, offers
+    o = offers[0]
+    assert o.price == Decimal(exp["price"]) and o.currency == "PLN" and o.condition == "new"
+    assert "FAB32LRD6" in o.title
+    for field in ("mpn", "ean", "in_stock"):
+        if field in exp:
+            assert getattr(o, field) == exp[field], field
+    assert match("FAB32LRD6", "", o.title, o.sku, o.mpn, o.ean).verdict == YES
+
+
+@pytest.mark.parametrize("url, key", [
+    ("https://agdsmart.pl/chlodziarko-zamrazarka-smeg-fab32lrd6,id128372.html", "agdsmart"),
+    ("https://elektrohome.pl/lodowka-smeg-fab32lrd6,id111801.html", "elektrohome"),
+    ("https://kuchniasklep.pl/produkt/smeg-lodowka-50s-retro-style-fab32lrd6-czerwona", "kuchniasklep"),
+    ("https://elazienki.pl/p/lodowka-wolnostojaca-smeg-50s-style-czerwony-fab32lrd6/", "elazienki"),
+    ("https://www.agdstyle.pl/lodowka-smeg-fab32lrd6-p-57753.html", "agdstyle"),
+    ("https://electropoland.pl/product-pol-41831-Lodowka-Smeg-FAB32LRD6.html", "electropoland"),
+    ("https://www.smeg.com/pl/produkty/FAB32LRD6", "smeg"),
+    ("https://pieknekuchnie.com/sklep/431/", "pieknekuchnie"),
+])
+def test_shop_for_url_small_shops(url, key):
+    assert shop_for_url(url).key == key
+
+
+def test_kuchniasklep_rendered_page_keeps_sale_price_cheapest():
+    prices = sorted(o.price for o in get_shop("kuchniasklep").parse(load_fixture("kuchniasklep", "product_rendered")))
+    assert prices == [Decimal("7599.00"), Decimal("9499.00")]  # check_offer takes the cheapest
+
+
+def test_pieknekuchnie_ignores_other_products_on_the_page():
+    page = load_fixture("pieknekuchnie", "product")
+    assert "FAB32RPG5" in page.html  # related fridges at the same price are on the page too
+    assert [o.sku for o in get_shop("pieknekuchnie").parse(page)] == ["FAB32LRD6"]
