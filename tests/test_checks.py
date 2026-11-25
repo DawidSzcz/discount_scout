@@ -216,3 +216,19 @@ def test_aggregator_check_keeps_unsupported_shops_as_supporting_offers(offer):
 def test_single_shop_check_has_no_supporting_offers(offer):
     check_offer(offer, fetch_fn=fake_fetch(XKOM))
     assert not SupportingOffer.objects.exists()
+
+
+def test_unavailable_price_is_recorded_but_never_a_hit(offer, mailoutbox, settings):
+    from scout.notify import maybe_alert
+    from scout.queries import model_stats
+
+    settings.SCOUT_NOTIFY_EMAIL = "me@example.com"
+    in_stock = check_offer(offer, fetch_fn=fake_fetch(XKOM))  # 13349 available
+    cheap_gone = replace(XKOM, html=XKOM.html.replace("13349", "9999").replace("InStock", "OutOfStock"))
+    obs = check_offer(offer, fetch_fn=fake_fetch(cheap_gone))
+    assert obs.price == Decimal("9999") and obs.in_stock is False  # kept in the history
+    assert not maybe_alert(obs) and not mailoutbox
+    stats = model_stats(offer.model)
+    assert stats.best is None  # the only offer is unavailable now: no current price
+    assert stats.all_time_low.pk == in_stock.pk
+    assert offer.unavailable

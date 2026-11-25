@@ -151,9 +151,12 @@ def _verify(shop, page, code, description, use_llm, cand: dict) -> dict:
     parsed = [p for p in shop.parse(page) if p.condition == "new"]
     if not parsed:
         return {**cand, "verdict": UNSURE, "reason": "no price found on the shop page"}
-    p = min(parsed, key=lambda x: x.price)
+    p = min([x for x in parsed if x.in_stock is not False] or parsed, key=lambda x: x.price)
     verdict, reason = _verdict(code, description, p, use_llm)
-    return {**cand, "price": str(p.price), "title": p.title or cand["title"], "verdict": verdict, "reason": reason}
+    if p.in_stock is False:
+        reason = f"not available now; {reason}"
+    return {**cand, "price": str(p.price), "title": p.title or cand["title"], "verdict": verdict, "reason": reason,
+            "in_stock": p.in_stock}
 
 
 def _fetch_ok(shop, url, fetch):

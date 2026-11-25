@@ -70,8 +70,8 @@ def is_suspicious(offer: Offer, price: Decimal, cfg: Settings, now) -> bool:
     """Outlier guard: price far from the model's recent median is held back (e.g. an instalment
     price parsed instead of the full price). Repeated, consistent "outliers" are accepted as real."""
     recent = list(
-        PriceObservation.objects.filter(
-            offer__model=offer.model, suspicious=False, fetched_at__gte=now - MEDIAN_WINDOW
+        PriceObservation.objects.valid().filter(
+            offer__model=offer.model, fetched_at__gte=now - MEDIAN_WINDOW
         ).values_list("price", flat=True)[:200]
     )
     if not recent:
@@ -149,7 +149,8 @@ def check_offer(offer: Offer, fetch_fn=polite_fetch, now=None) -> PriceObservati
             reason = CheckFailure.Reason.NO_MATCH if parsed else CheckFailure.Reason.PARSE_ERROR
             fail(reason, tier, page, f"snapshot: {_save_snapshot(offer, page)}")
             continue
-        best = min(candidates, key=lambda o: o.price)
+        # Prefer offers that can be bought; an unavailable price is still recorded, flagged in_stock=False.
+        best = min([o for o in candidates if o.in_stock is not False] or candidates, key=lambda o: o.price)
         if shop.kind == "aggregator":
             _refresh_supporting(offer, candidates, now)
         if shop.kind != "aggregator" and not offer.match_confirmed:

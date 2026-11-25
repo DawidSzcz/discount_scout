@@ -52,6 +52,7 @@ Settings            (singleton per user: check_interval_h, summary_interval_h, n
 
 - **Aggregator offers** (Allegro product page, Ceneo listing): each check saves **one** `PriceObservation`, the cheapest offer that is new and passes matching, with the seller name and a direct link.
 - **Best price for a model** = the minimum of each active offer's latest valid observation.
+- **Valid** = not suspicious (outlier guard) and not unavailable. A page that says the product cannot be bought (`in_stock=False`, e.g. Empik showing a last price without a seller) is still recorded for the history and flagged "not available", but never counts as the best price, the all-time low, an alert or a summary change. An offer whose latest check is unavailable has no current price. In discovery such candidates are marked and not pre-selected. `in_stock=None` (the shop does not say) counts as available.
 - **Supporting offers:** a Ceneo check also keeps the listing's offers from unsupported shops (cheapest per seller) as `SupportingOffer` rows. The model overview lists them below the main offer table ("Other shops on Ceneo"), marking the one that is the lowest price right now. They are not checked on their own and send no alerts; their price already counts through the Ceneo offer's cheapest-offer price.
 
 ## 4. Add-product flow (wizard)

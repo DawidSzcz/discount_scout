@@ -1,6 +1,6 @@
 """Emails (PLAN.md section 7).
 
-Alert:   a model's price drops below its all-time low (suspicious prices excluded).
+Alert:   a model's price drops below its all-time low (suspicious and unavailable prices excluded).
 Summary: every summary_interval_hours: best current price per model + problems; skipped when
          nothing changed and there are no problems.
 """
@@ -67,11 +67,11 @@ def _send(cfg: Settings, subject: str, body: str) -> bool:
 
 def maybe_alert(obs: PriceObservation) -> bool:
     """Email if this observation is a new all-time low for its model. Returns True if sent."""
-    if obs.suspicious:
+    if obs.suspicious or obs.in_stock is False:
         return False
     model = obs.offer.model
     previous_low = (
-        PriceObservation.objects.filter(offer__model=model, suspicious=False, currency=obs.currency)
+        PriceObservation.objects.valid().filter(offer__model=model, currency=obs.currency)
         .exclude(pk=obs.pk)
         .aggregate(low=Min("price"))["low"]
     )
@@ -109,7 +109,7 @@ class Summary:
 
 
 def latest_valid(offer: Offer) -> PriceObservation | None:
-    return offer.observations.filter(suspicious=False).select_related("offer").first()
+    return offer.current_price()
 
 
 def collect_summary(cfg: Settings) -> Summary:
@@ -135,7 +135,8 @@ def collect_summary(cfg: Settings) -> Summary:
         new_obs = new_obs.filter(fetched_at__gt=since)
     s.suspicious = [o for o in new_obs if o.suspicious]
     s.pending_reviews = MatchReview.objects.filter(offer__in=offers, decision__isnull=True).count()
-    s.changed = _prices_changed([o for o in new_obs if not o.suspicious], first_summary=since is None)
+    s.changed = _prices_changed([o for o in new_obs if not o.suspicious and o.in_stock is not False],
+                                first_summary=since is None)
     return s
 
 
@@ -144,7 +145,7 @@ def _prices_changed(new_obs, first_summary: bool) -> bool:
         return bool(new_obs)
     for obs in new_obs:
         prev = (
-            obs.offer.observations.filter(suspicious=False, fetched_at__lt=obs.fetched_at)
+            obs.offer.observations.valid().filter(fetched_at__lt=obs.fetched_at)
             .values_list("price", flat=True)
             .first()
         )

@@ -80,9 +80,34 @@ class Offer(models.Model):
     def __str__(self):
         return f"{self.model.code} @ {self.shop}"
 
+    def current_price(self):
+        """The offer's current valid price, or None. Unavailable now means no price (an older
+        in-stock price would be stale); a suspicious latest price falls back to the last valid one."""
+        latest = self.observations.first()
+        if latest is None or latest.in_stock is False:
+            return None
+        if latest.suspicious:
+            return self.observations.valid().first()
+        return latest
+
+    @property
+    def unavailable(self) -> bool:
+        latest = self.observations.first()
+        return latest is not None and latest.in_stock is False
+
+
+class ObservationQuerySet(models.QuerySet):
+    def valid(self):
+        """Prices that count: not held back by the outlier guard and not marked unavailable
+        (in_stock=None means the shop does not say, which counts as available)."""
+        return self.filter(suspicious=False).exclude(in_stock=False)
+
 
 class PriceObservation(models.Model):
-    """Every price ever fetched (spec point 8)."""
+    """Every price ever fetched (spec point 8). Unavailable (in_stock=False) and suspicious prices
+    are kept for the history but never count as a best price, all-time low or alert."""
+
+    objects = ObservationQuerySet.as_manager()
 
     class Condition(models.TextChoices):
         NEW = "new"
@@ -97,7 +122,7 @@ class PriceObservation(models.Model):
     seller = models.CharField(max_length=200, blank=True, help_text="Aggregators: the seller of the cheapest offer")
     seller_url = models.URLField(max_length=1000, blank=True)
     condition = models.CharField(max_length=20, choices=Condition.choices, default=Condition.NEW)
-    in_stock = models.BooleanField(null=True)
+    in_stock = models.BooleanField(null=True, help_text="False = the shop says it cannot be bought now")
     tier_used = models.PositiveSmallIntegerField()
     suspicious = models.BooleanField(default=False, help_text="Failed the outlier guard; excluded from alerts")
     snapshot_path = models.CharField(max_length=500, blank=True, help_text="Saved HTML, for debugging parsers")

@@ -257,3 +257,12 @@ def test_detail_lists_unsupported_shops_from_ceneo(client, offer):
     ceneo.save()
     html = client.get(reverse("product_detail", args=[offer.model.product_id])).content.decode()
     assert "Other shops on Ceneo" not in html  # paused listing: its sellers are hidden
+
+
+def test_unavailable_offer_is_flagged_and_not_best(client, offer):
+    gone = Offer.objects.create(model=offer.model, shop="empik", url="https://www.empik.com/x,p1,agd-p")
+    PriceObservation.objects.create(offer=gone, price=Decimal("6559"), in_stock=False, tier_used=2)
+    html = client.get(reverse("product_detail", args=[offer.model.product_id])).content.decode()
+    assert "not available" in html
+    best = html.split("Best now", 1)[1][:400]
+    assert "13 349" in best and "6 559" not in best

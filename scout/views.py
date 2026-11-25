@@ -112,7 +112,7 @@ def _offer_rows(run):
         for i, c in enumerate(cands):
             observed = c["url"] in known_urls
             same_shop = not observed and c["shop"] in known_shops
-            preselect = (c["verdict"] == "yes" and not observed and not same_shop
+            preselect = (c["verdict"] == "yes" and not observed and not same_shop and c.get("in_stock") is not False
                          and (c["shop"] != "ceneo" or c is main_listing))
             rows.append({**c, "key": f"{code}|{i}", "checked": preselect, "observed": observed, "same_shop": same_shop})
         groups.append({"code": code, "rows": rows})

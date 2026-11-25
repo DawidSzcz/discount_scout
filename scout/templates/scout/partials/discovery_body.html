@@ -76,7 +76,7 @@
               {% elif r.same_shop %}<br><span class="muted small">you already observe another {{ r.shop|shop_name }} URL</span>{% endif %}</td>
             <td class="num">{{ r.price|pln }}</td>
             <td><span class="badge {% if r.verdict == 'yes' %}ok{% elif r.verdict == 'no' %}bad{% else %}warn{% endif %}">
-              {% if r.verdict == 'yes' %}same model{% elif r.verdict == 'no' %}different model{% else %}unsure{% endif %}</span>
+              {% if r.verdict == 'yes' %}same model{% elif r.verdict == 'no' %}different model{% else %}unsure{% endif %}</span>{% if r.in_stock is False %} <span class="badge warn">not available</span>{% endif %}
               <span class="muted small">{{ r.reason }}</span></td>
             <td class="small"><a href="{{ r.url }}" target="_blank" rel="noopener">{{ r.title|default:r.url|truncatechars:60 }}</a></td>
           </tr>

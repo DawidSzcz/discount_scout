@@ -4,7 +4,7 @@
     {% if row.latest.seller %}<span class="muted small">({{ row.latest.seller }})</span>{% endif %}
   </td>
   <td class="num">
-    {% if row.latest %}{{ row.latest.price|pln }}{% if row.latest.suspicious %} <span class="badge warn" title="Held back by the outlier guard; not used for alerts">suspicious</span>{% endif %}
+    {% if row.latest %}{{ row.latest.price|pln }}{% if row.latest.suspicious %} <span class="badge warn" title="Held back by the outlier guard; not used for alerts">suspicious</span>{% endif %}{% if row.latest.in_stock is False %} <span class="badge warn" title="The shop says it cannot be bought now; not used as best price or for alerts">not available</span>{% endif %}
     {% else %}<span class="muted">-</span>{% endif %}
   </td>
   <td class="small">

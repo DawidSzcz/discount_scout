@@ -32,7 +32,7 @@ def model_stats(model: ProductModel) -> ModelStats:
         latest = offer.observations.first()
         stats.rows.append(OfferRow(offer=offer, latest=latest))
         if offer.active:
-            valid = latest if latest and not latest.suspicious else offer.observations.filter(suspicious=False).first()
+            valid = offer.current_price()
             if valid:
                 valid_latest.append(valid)
     if valid_latest:
@@ -43,7 +43,7 @@ def model_stats(model: ProductModel) -> ModelStats:
     for so in stats.supporting:
         so.is_best = stats.best is not None and so.price <= stats.best.price
     stats.all_time_low = (
-        PriceObservation.objects.filter(offer__model=model, suspicious=False).order_by("price", "fetched_at").first()
+        PriceObservation.objects.valid().filter(offer__model=model).order_by("price", "fetched_at").first()
     )
     return stats
 
@@ -76,7 +76,7 @@ def products_with_best(user):
             "model_count": len(models),
             "offer_count": Offer.objects.filter(model__product=product).count(),
             "best": min(bests, key=lambda o: o.price) if bests else None,
-            "all_time_low": PriceObservation.objects.filter(offer__model__product=product, suspicious=False)
+            "all_time_low": PriceObservation.objects.valid().filter(offer__model__product=product)
             .aggregate(low=Min("price"))["low"],
             "problems": problems,
         })
@@ -91,7 +91,7 @@ def chart_data(model: ProductModel) -> dict:
     for offer in model.offers.all():
         points = [
             {"x": int(o.fetched_at.timestamp() * 1000), "y": float(o.price)}
-            for o in offer.observations.filter(suspicious=False).order_by("fetched_at")
+            for o in offer.observations.valid().order_by("fetched_at")
         ]
         if not points:
             continue
