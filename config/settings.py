@@ -99,6 +99,13 @@ GEMINI_API_KEY = env("GEMINI_API_KEY", "")
 # Free keys (2026-11): only the lite model answers reliably; search grounding needs billing.
 GEMINI_MODEL = env("GEMINI_MODEL", "gemini-3.5-flash-lite")
 
+# Allegro REST API (client_credentials, read-only public offers). Allegro requires this UA.
+ALLEGRO_CLIENT_ID = env("ALLEGRO_CLIENT_ID", "")
+ALLEGRO_CLIENT_SECRET = env("ALLEGRO_CLIENT_SECRET", "")
+ALLEGRO_USER_AGENT = env(
+    "ALLEGRO_USER_AGENT", "discount_scout/1.0.0 (+https://github.com/DawidSzcz/discount_scout)"
+)
+
 # Where alerts and summaries go if Settings.notify_email is empty.
 SCOUT_NOTIFY_EMAIL = env("SCOUT_NOTIFY_EMAIL", "")
 
