@@ -185,5 +185,5 @@ Example URLs from SPEC.md, one fetch each:
 
 ## 11. Open questions
 
-- *(v2)* Allegro API: register an app at developer.allegro.pl; confirm which endpoints give offers + prices for a product (`/sale/products`, `/offers/listing`) and their auth/rate limits.
+- *(v2)* Allegro API, probed 2026-11-26 with a registered app (client_credentials token works): `GET /offers/listing?product.id=...` and `GET /sale/products?phrase=...` return 403 AccessDenied (offer search needs Allegro to grant access on request). `GET /sale/products/{id}` works but has no prices or offers; it does give `Kod producenta` and EAN, so it can confirm that a catalog product id is the watched model. Still open: request /offers/listing access, or read the product page with tier 3.
 - *(v2)* Tier 3 needs a headed Chrome (an X display) inside Docker. Run that worker natively on the host instead?
